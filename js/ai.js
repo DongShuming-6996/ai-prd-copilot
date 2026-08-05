@@ -1,10 +1,11 @@
 (function (global) {
   var serverHasKey = null; // null=未知，true/false=服务端是否配置了 Key
+  var API_BASE = (typeof window !== "undefined" && window.AI_API_BASE) || "";
 
   async function checkServerKey() {
     if (serverHasKey !== null) return serverHasKey;
     try {
-      var res = await fetch("/api/status", { method: "GET" });
+      var res = await fetch(API_BASE + "/api/status", { method: "GET" });
       var data = await res.json();
       serverHasKey = !!(data && data.hasEnvKey);
     } catch (e) {
@@ -30,7 +31,7 @@
     }
 
     // 真实模式：经服务端代理到模型服务（Key 由服务端持有，浏览器不保存）
-    var res = await fetch("/api/ai", {
+    var res = await fetch(API_BASE + "/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(Object.assign({ action: action, apiKey: clientKey, model: settings.model }, payload)),

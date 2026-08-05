@@ -26,7 +26,7 @@ OPENAI_API_KEY=sk-xxx AI_MODEL=gpt-4.1-mini node server.js
 ## 作品集部署建议（面试官可直接体验）
 
 1. **Key 只放服务端**：本地预览用 `OPENAI_API_KEY` 环境变量；正式部署用 Supabase Edge Function Secrets 或部署平台的 Secrets（GitHub Actions / 腾讯云云函数环境变量）。**不要**把 Key 写进前端代码或提交到 Git 历史。
-2. **前端是纯静态资源**：可部署到腾讯云 COS / 静态网站托管并绑定域名，AI 请求指向 Supabase Edge Function（或在腾讯云起一个 Node 云函数做代理），Key 永远在服务端。
+2. **前端是纯静态资源**：首选 **GitHub Pages**（国内可访问、零成本，与你的 `yinyi-seal-guide` 站点同一方式）；AI 请求通过 `js/config.js` 里的 `AI_API_BASE` 指向远程代理，Key 永远在服务端。
 3. **防止滥用**：公开作品集会暴露你的 Key 用量，建议在 Edge Function 里加简单防护：请求来源校验（Referer / Origin）、单 IP 频率限制，或一个只给面试官看的演示口令。
 4. 面试官打开链接即可用，不需要任何配置。
 
@@ -50,10 +50,11 @@ server.js       零依赖本地服务：静态文件 + /api/ai 模型代理
 
 ## 上线路线（待接入）
 
-1. **GitHub**：代码推送到仓库；
-2. **Supabase**：接入 Auth（用户登录）+ Postgres（项目 / 材料 / PRD / 追问记录 / 模板 / 偏好，启用 RLS）+ Storage（材料文件）；AI 调用放 Supabase Edge Function，Key 存 Secrets；
-3. **腾讯云**：前端为纯静态资源，可直接部署到腾讯云 COS / 静态网站托管，绑定腾讯云域名；
-4. 上线前将 `js/ai.js` 的请求地址由 `/api/ai` 切换为 Supabase Edge Function 地址。
+1. **GitHub Pages（主站）**：仓库 Settings → Pages → Deploy from a branch（main / root），站点地址 `https://dongshuming-6996.github.io/ai-prd-copilot/`；
+2. **Demo 模式直接可用**：GitHub Pages 上无服务端时自动回退 Demo 模式（纯本地生成）；
+3. **真实模型（国内可访问）**：在腾讯云创建云函数（Node 运行时）部署 `lib/ai-proxy.js` 的代理逻辑，`OPENAI_API_KEY` 放云函数环境变量；再把 `js/config.js` 的 `AI_API_BASE` 填成云函数地址并推送；
+4. **Supabase（可选阶段 2）**：接入 Auth + Postgres（`supabase/schema.sql`），把 localStorage 读写替换为数据库调用；
+5. **域名**：腾讯云域名可用 CNAME 绑定到 `dongshuming-6996.github.io`（或绑定到腾讯云 API 网关的代理域名）。
 
 ## 安全提醒
 
