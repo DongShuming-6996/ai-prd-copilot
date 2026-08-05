@@ -1,0 +1,15 @@
+# 本地环境文件（严禁提交密钥）
+.env*
+!.env.example
+
+# Vercel
+.vercel
+!.vercel/project.json
+
+# Supabase
+/supabase/.temp
+
+# 系统与编辑器
+.DS_Store
+*.tsbuildinfo
+npm-debug.log*
