@@ -25,6 +25,16 @@
   var TYPE_TEXT = { lighthouse: "LightHouse", minutes: "会议纪要", ppt: "PPT", text: "文本" };
   var STATUS_TEXT = { draft: "草稿", questions: "追问中", editing: "编辑中", done: "已完成" };
 
+  function topLevelCount(sections) {
+    var set = {};
+    (sections || []).forEach(function (s) {
+      var m = String(s.title || "").match(/^\s*(\d+)/);
+      if (m) set[m[1]] = true;
+    });
+    var n = Object.keys(set).length;
+    return n || (sections ? sections.length : 0);
+  }
+
   var App = {
     state: {
       projects: [],
@@ -123,7 +133,7 @@
           var pending = p.questions.filter(function (q) { return q.status === "pending"; }).length;
           html += '<div class="card project-card">';
           html += '<div class="meta"><a href="#/project/' + encodeURIComponent(p.id) + '" class="name">' + esc(p.name) + "</a>";
-          html += '<div class="sub">' + fmtTime(p.updatedAt) + " · " + p.sections.length + " 节 · ";
+          html += '<div class="sub">' + fmtTime(p.updatedAt) + " · " + topLevelCount(p.sections) + " 节 · ";
           html += p.questions.length ? pending + " 条追问待确认" : "无追问";
           html += p.usedDemo ? " · Demo 生成" : "";
           html += "</div></div>";
@@ -399,6 +409,8 @@
           })
             .then(function (qRes) {
               var now = Date.now();
+              var questions = (qRes && qRes.questions) || [];
+              var questionsError = questions.length ? "" : "模型未返回有效追问（可能未按 JSON 格式输出）";
               var project = {
                 id: Store.uid(),
                 name: draft.name,
@@ -409,7 +421,7 @@
                 crossDept: s.crossDept,
                 prefs: Object.assign({}, s.prefs),
                 sections: draft.sections,
-                questions: qRes.questions,
+                questions: questions,
                 status: "questions",
                 usedDemo: !!draft.usedDemo,
               };
@@ -420,6 +432,9 @@
               s.generating = false;
               s.materials = [];
               location.hash = "#/project/" + encodeURIComponent(project.id);
+              if (questionsError) {
+                window.alert("初稿已生成，但追问生成失败：" + questionsError + "\n可在项目页点击「重新生成追问」重试。");
+              }
             });
         })
         .catch(function (e) {
@@ -442,7 +457,7 @@
       }
       this.state.project = project;
       this.state.activeKey = project.sections[0] ? project.sections[0].key : "";
-      if (project.questions.length === 0) this.state.tab = "edit";
+      this.state.tab = "questions";
 
       var html = '<div class="row" style="justify-content:space-between">';
       html += '<div style="min-width:0; flex:1">';
@@ -467,7 +482,7 @@
       var pendCount = p.questions.filter(function (q) { return q.status === "pending"; }).length;
       var confirmedCount = p.questions.filter(function (q) { return q.status === "confirmed"; }).length;
       el.innerHTML =
-        '<span class="tag">' + p.sections.length + " 节</span>" +
+        '<span class="tag">' + topLevelCount(p.sections) + " 节</span>" +
         '<span class="tag ' + (pendCount > 0 ? "warn" : "ok") + '">' +
         (pendCount > 0 ? pendCount + " 条追问待确认" : "追问已处理（确认 " + confirmedCount + " 条）") +
         "</span>" +
@@ -482,8 +497,12 @@
       if (this.state.tab === "questions") {
         if (!p.questions.length) {
           this.clearFixedBar();
-          body.innerHTML = '<div class="card">该项目没有生成追问，可<a href="#/new" style="color:#2563eb">重新生成</a>或直接进入编辑页。';
+          body.innerHTML = '<div class="card">该项目没有生成追问（可能追问生成失败，初稿已保留）。';
+          body.innerHTML += '<button class="btn sm" style="margin-left:10px" id="go-enhance-empty">重新生成追问</button>';
           body.innerHTML += '<button class="btn sm primary" style="margin-left:10px" id="go-edit-empty">进入编辑页</button></div>';
+          document.getElementById("go-enhance-empty").addEventListener("click", function () {
+            self.enhanceQuestions(p);
+          });
           document.getElementById("go-edit-empty").addEventListener("click", function () {
             self.mergeAnswers(p);
             self.state.tab = "edit";
@@ -514,7 +533,8 @@
         s2: p.questions.filter(function (q) { return q.stage === 2 && !q.dataLayer; }).length,
         data: p.questions.filter(function (q) { return q.dataLayer; }).length,
       };
-      var html = '<div class="banner">✅ 生成完成 · ' + p.sections.length + "/" + p.sections.length + " 章节已生成 · AI 提出 <b>" + total + " 条追问</b>" + (p.usedDemo ? "（Demo 模式）" : "") + "</div>";
+      var secCount = topLevelCount(p.sections);
+      var html = '<div class="banner">✅ 生成完成 · ' + secCount + "/" + secCount + " 章节已生成 · AI 提出 <b>" + total + " 条追问</b>" + (p.usedDemo ? "（Demo 模式）" : "") + "</div>";
       if (p.usedDemo) {
         html += '<div class="banner warn" style="margin-top:8px">服务端未配置 API Key · 当前为 Demo 模式，<a href="#/settings" style="color:#c8ff3d;text-decoration:underline">查看部署说明 →</a></div>';
       }
