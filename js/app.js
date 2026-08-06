@@ -514,7 +514,7 @@
           document.getElementById("go-edit-empty").addEventListener("click", function () {
             self.mergeAnswers(p);
             self.state.tab = "edit";
-            self.renderProject();
+            self.renderProject(p.id);
           });
           return;
         }
@@ -661,7 +661,7 @@
       document.getElementById("fb-go-edit").addEventListener("click", function () {
         self.mergeAnswers(p);
         self.state.tab = "edit";
-        self.renderProject();
+        self.renderProject(p.id);
       });
     },
 
