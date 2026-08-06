@@ -1,6 +1,6 @@
-# AI PRD Copilot（本地预览版）
+# AI PRD Copilot（PRD 撰写与管理工具）
 
-面向 B 端中后台产品经理的 PRD 撰写提效工具：粘贴 / 上传材料 → AI 按自定义框架生成初稿 → 两阶段追问（框架覆盖检查 + 开发视角审查）→ 人工兜底 → Markdown 导出。
+面向 B 端中后台产品经理的 **PRD 撰写与管理工具**：创建项目 → 按框架章节填写 → 编辑 → 自动保存 → 导出（Word / PDF / Markdown）→ 列表管理。纯本地优先，无 AI 依赖，访客零配置。
 
 ## 快速开始（零依赖，无需 npm install）
 
@@ -8,66 +8,26 @@
 node server.js
 ```
 
-浏览器打开 http://localhost:4100
-
-也可以直接双击 `index.html` 用 Demo 模式体验（无 API Key 时前端纯本地生成；真实模型模式需要启动 server.js 做代理）。
-
-## 两种 AI 模式
-
-- **Demo 模式（默认）**：未配置 API Key 时自动启用，内置虚构样例（TCC 质检平台-列表页质检结果上移）。把样例材料粘贴进去即可看到完整输出。
-- **真实模式（作品集 / 上线）**：Key 只配置在**服务端**，访客无需也不应填写自己的 Key。启动前设置环境变量：
-
-```bash
-AI_API_BASE=https://api.deepseek.com AI_API_KEY=sk-你的Key AI_MODEL=deepseek-chat node server.js
-```
-
-支持任意 OpenAI 兼容接口（默认 OpenAI；DeepSeek 只需设置 `AI_API_BASE` + `AI_API_KEY` + `AI_MODEL`）。
-
-应用会先探测服务端是否已配置 Key（`/api/status`）：已配置 → 真实模型；未配置 → 自动回退 Demo 模式。前端不存储、不展示、不要求访客填写 Key。
-
-## 使用次数限制（5 次）
-
-- **浏览器端**：每个访客（浏览器）累计 5 次生成（`js/config.js` 里 `AI_USAGE_LIMIT=5`，`AI_USAGE_WINDOW="total"` 为累计、`"day"` 为每日重置）；
-- **服务端**：每个 IP 每日 5 次（`lib/ai-proxy.js` 按 IP 计数，`USAGE_LIMIT` 环境变量可调，默认 5），防止绕过浏览器限制；达到上限返回 429 并提示次日再来。
-
-## 作品集部署建议（面试官可直接体验）
-
-1. **Key 只放服务端**：本地预览用 `OPENAI_API_KEY` 环境变量；正式部署用 Supabase Edge Function Secrets 或部署平台的 Secrets（GitHub Actions / 腾讯云云函数环境变量）。**不要**把 Key 写进前端代码或提交到 Git 历史。
-2. **前端是纯静态资源**：首选 **GitHub Pages**（国内可访问、零成本，与你的 `yinyi-seal-guide` 站点同一方式）；AI 请求通过 `js/config.js` 里的 `AI_API_BASE` 指向远程代理，Key 永远在服务端。
-3. **防止滥用**：公开作品集会暴露你的 Key 用量，建议在 Edge Function 里加简单防护：请求来源校验（Referer / Origin）、单 IP 频率限制，或一个只给面试官看的演示口令。
-4. 面试官打开链接即可用，不需要任何配置。
+浏览器打开 http://localhost:4100（也可以直接双击 `index.html` 使用）。
 
 ## 功能
 
-- 输入页：粘贴文本 / 拖拽或点击上传 txt / md / pptx（PPT 在浏览器端提取文本）；支持从微信 / 飞书 / Teams 等聊天软件拖拽文件
-- 框架章节：勾选式选择要生成的章节（默认全选 8 节：背景 / 目标 / 价值 / 改进点 / 数据层 / 后端 / 前端 / 验收 / 测试）
-- 两阶段追问：阶段一框架覆盖检查 + 阶段二开发视角审查，每条带建议答案，支持逐条确认 / 修改 / 跳过、一键跳过全部
-- 编辑页：分节编辑、溯源引用（点击来源查看原文段落）、未确认项清单、导出 / 复制 Markdown
-- 数据持久化：浏览器 localStorage（后续切换 Supabase）
-- 视觉：暗黑霓虹风（深海蓝-荧光柠绿径向渐变、噪点肌理、几何圆形构图），自适应 PC / 平板 / 手机任意窗口宽度
+- **项目管理**：项目列表、状态（草稿 / 编辑中 / 已完成）、删除；
+- **框架章节**：默认 8 节（背景 / 目标 / 价值 / 改进点 / 数据层 / 后端 / 前端 / 验收 / 测试），创建时按需勾选，支持自定义章节（持久化）；
+- **编辑器**：按章节填写，内容自动保存到本地浏览器；章节导航 + 完成度（已填 x/y）；
+- **导出**：保存为 Word（.doc）、保存为 PDF（浏览器打印）、Markdown；
+- **视觉**：暗黑霓虹风（深海蓝-荧光柠绿径向渐变、噪点肌理、几何圆形构图），自适应 PC / 平板 / 手机；
+- **数据**：浏览器 localStorage（后续可接入 Supabase 做多端同步）。
 
 ## 目录结构
 
 ```
 index.html      单页应用入口
 css/styles.css  样式
-js/             前端逻辑（模板 / 存储 / Demo 生成 / 导出 / PPT 解析 / AI 调用 / 页面）
-server.js       零依赖本地服务：静态文件 + /api/ai 模型代理
+js/             前端逻辑（模板 / 存储 / 导出 / 页面）
+server.js       零依赖本地静态服务
 ```
 
-## 上线路线（待接入）
+## 上线
 
-1. **GitHub Pages（主站）**：仓库 Settings → Pages → Deploy from a branch（main / root），站点地址 `https://dongshuming-6996.github.io/ai-prd-copilot/`；
-2. **Demo 模式直接可用**：GitHub Pages 上无服务端时自动回退 Demo 模式（纯本地生成）；
-3. **真实模型（国内可访问）**：在腾讯云创建云函数（Node 运行时）部署 `lib/ai-proxy.js` 的代理逻辑，`OPENAI_API_KEY` 放云函数环境变量；再把 `js/config.js` 的 `AI_API_BASE` 填成云函数地址并推送；
-4. **Supabase（可选阶段 2）**：接入 Auth + Postgres（`supabase/schema.sql`），把 localStorage 读写替换为数据库调用；
-5. **域名**：腾讯云域名可用 CNAME 绑定到 `dongshuming-6996.github.io`（或绑定到腾讯云 API 网关的代理域名）。
-
-## 安全提醒
-
-- 不要把 API Key 提交到 Git，也不要粘贴到聊天工具里；
-- 前端不保存 Key：本地预览的旧版设置项（浏览器 localStorage 填 Key）已移除，统一改为服务端持有。
-
-## 备选版本
-
-同级目录 `ai-prd-copilot-next/` 保留了一份 Next.js + TypeScript 版本（API 路由版），需要联网执行 `npm install` 后使用，适合后续走 Node 服务端部署的场景。
+纯静态资源，可直接部署 GitHub Pages / 腾讯云静态托管，绑定域名即可；详见 `docs/部署手册.md`（其中 AI 代理相关步骤已不再需要）。

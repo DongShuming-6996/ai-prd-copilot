@@ -47,10 +47,6 @@
     },
     loadCustomSections: function () { return read("custom_sections", []); },
     saveCustomSections: function (list) { write("custom_sections", list); },
-    loadUsage: function () { return read("usage", { count: 0, day: "" }); },
-    saveUsage: function (u) { write("usage", u); },
-    loadSettings: function () { return read("settings", { apiKey: "", model: "" }); },
-    saveSettings: function (s) { write("settings", s); },
   };
 
   global.Store = Store;
