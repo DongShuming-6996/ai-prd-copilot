@@ -35,6 +35,12 @@ function readBody(req) {
   });
 }
 
+function clientIp(req) {
+  const fwd = req.headers["x-forwarded-for"];
+  if (fwd) return String(fwd).split(",")[0].trim();
+  return req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "unknown";
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
@@ -46,7 +52,7 @@ const server = http.createServer(async (req, res) => {
       send(res, 400, JSON.stringify({ error: "请求体不是合法 JSON" }), "application/json; charset=utf-8");
       return;
     }
-    const r = await handleAction(body);
+    const r = await handleAction(body, { ip: clientIp(req) });
     send(res, r.status, JSON.stringify(r.payload), "application/json; charset=utf-8");
     return;
   }

@@ -157,6 +157,12 @@
           .map(function (sec) { return sec.key; })
           .concat(customSections.map(function (sec) { return sec.key; }));
       }
+      var usage = Store.loadUsage();
+      var usageLimit = Number(window.AI_USAGE_LIMIT || 5);
+      var usageWin = window.AI_USAGE_WINDOW || "total";
+      var today = new Date().toISOString().slice(0, 10);
+      if (usageWin === "day" && usage.day !== today) usage = { count: 0, day: today };
+      var remaining = Math.max(0, usageLimit - (usage.count || 0));
 
       var html = '<h1 class="page-title">新建 PRD 项目</h1><div class="cols">';
       html += '<div class="col wide">';
@@ -204,6 +210,9 @@
       html += s.generating ? '<span class="spinner" style="display:inline-block; width:13px; height:13px; border-width:2px; vertical-align:-2px"></span> 正在生成初稿与追问…' : "生成 PRD 初稿";
       html += "</button>";
       html += '<div class="hint">生成后进入追问面板：两阶段追问可逐条确认 / 修改 / 一键跳过</div>';
+      html += '<div class="hint">' + (remaining > 0
+        ? "本机剩余试用：<b style='color:#c8ff3d'>" + remaining + " / " + usageLimit + "</b> 次（" + (usageWin === "day" ? "每日重置" : "累计") + "）"
+        : "本机试用次数已用完") + "</div>";
       html += "</div></div></div>";
 
       document.getElementById("app").innerHTML = html;
@@ -366,6 +375,20 @@
         this.renderNew();
         return;
       }
+      var usage = Store.loadUsage();
+      var usageLimit = Number(window.AI_USAGE_LIMIT || 5);
+      var usageWin = window.AI_USAGE_WINDOW || "total";
+      var today = new Date().toISOString().slice(0, 10);
+      if (usageWin === "day" && usage.day !== today) {
+        usage = { count: 0, day: today };
+        Store.saveUsage(usage);
+      }
+      if ((usage.count || 0) >= usageLimit) {
+        s.error = "试用次数已用完（" + usageLimit + " 次），请明天再来或联系作者";
+        s.generating = false;
+        this.renderNew();
+        return;
+      }
       AI.callAi("draft", { materials: s.materials, sections: sections, crossDept: s.crossDept, prefs: s.prefs })
         .then(function (draft) {
           return AI.callAi("questions", {
@@ -391,6 +414,9 @@
                 usedDemo: !!draft.usedDemo,
               };
               Store.upsertProject(project);
+              usage.count = (usage.count || 0) + 1;
+              usage.day = today;
+              Store.saveUsage(usage);
               s.generating = false;
               s.materials = [];
               location.hash = "#/project/" + encodeURIComponent(project.id);

@@ -29,6 +29,9 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const r = await handleAction(body);
+  const ip = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim() || req.socket.remoteAddress;
+  const r = await handleAction(body, { ip });
   res.status(r.status).json(r.payload);
 };

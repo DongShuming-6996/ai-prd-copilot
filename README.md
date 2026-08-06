@@ -18,10 +18,17 @@ node server.js
 - **真实模式（作品集 / 上线）**：Key 只配置在**服务端**，访客无需也不应填写自己的 Key。启动前设置环境变量：
 
 ```bash
-OPENAI_API_KEY=sk-xxx AI_MODEL=gpt-4.1-mini node server.js
+AI_API_BASE=https://api.deepseek.com AI_API_KEY=sk-你的Key AI_MODEL=deepseek-chat node server.js
 ```
 
+支持任意 OpenAI 兼容接口（默认 OpenAI；DeepSeek 只需设置 `AI_API_BASE` + `AI_API_KEY` + `AI_MODEL`）。
+
 应用会先探测服务端是否已配置 Key（`/api/status`）：已配置 → 真实模型；未配置 → 自动回退 Demo 模式。前端不存储、不展示、不要求访客填写 Key。
+
+## 使用次数限制（5 次）
+
+- **浏览器端**：每个访客（浏览器）累计 5 次生成（`js/config.js` 里 `AI_USAGE_LIMIT=5`，`AI_USAGE_WINDOW="total"` 为累计、`"day"` 为每日重置）；
+- **服务端**：每个 IP 每日 5 次（`lib/ai-proxy.js` 按 IP 计数，`USAGE_LIMIT` 环境变量可调，默认 5），防止绕过浏览器限制；达到上限返回 429 并提示次日再来。
 
 ## 作品集部署建议（面试官可直接体验）
 
