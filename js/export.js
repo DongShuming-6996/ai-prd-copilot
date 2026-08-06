@@ -9,7 +9,7 @@
     var lines = [];
     lines.push("# " + project.name);
     lines.push("");
-    lines.push("> 由 AI PRD Copilot 整理 · " + fmtTime(project.updatedAt || Date.now()));
+    lines.push("> 由 PRD Studio 整理 · " + fmtTime(project.updatedAt || Date.now()));
     lines.push("");
     project.sections.forEach(function (s) {
       lines.push("## " + s.title);

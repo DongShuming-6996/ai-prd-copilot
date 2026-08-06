@@ -1,4 +1,4 @@
-# AI PRD Copilot（PRD 撰写与管理工具）
+# PRD Studio（PRD 撰写与管理工作台）
 
 面向 B 端中后台产品经理的 **PRD 撰写与管理工具**：创建项目 → 按框架章节填写 → 编辑 → 自动保存 → 导出（Word / PDF / Markdown）→ 列表管理。纯本地优先，无 AI 依赖，访客零配置。
 
