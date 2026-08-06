@@ -144,7 +144,7 @@
     },
     getUserProjects: function () { return this.loadUserProjects(); },
     clearUserData: function () {
-      // 退出时清除该用户创建的全部数据：PRD、自定义章节/业务线/协作部门/框架模板
+      // 退出时清除该用户创建的全部数据：PRD（含标签）、自定义章节/业务线/协作部门/框架模板
       ["projects", "templates", "custom_sections", "custom_business", "custom_dept"].forEach(function (k) {
         try { localStorage.removeItem(PREFIX + k); } catch (e) {}
       });
@@ -195,6 +195,17 @@
           tx.onerror = function () { rej(tx.error); };
         });
       });
+    },
+    clearAttachments: function () {
+      // 退出时清空该用户上传的附件（IndexedDB）
+      return openDB().then(function (db) {
+        return new Promise(function (res, rej) {
+          var tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").clear();
+          tx.oncomplete = res;
+          tx.onerror = function () { rej(tx.error); };
+        });
+      }).catch(function () {});
     },
   };
 
