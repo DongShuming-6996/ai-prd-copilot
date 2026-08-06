@@ -144,8 +144,6 @@
     },
     getUserProjects: function () { return this.loadUserProjects(); },
     clearUserProjects: function () { this.saveUserProjects([]); },
-    isSplashDone: function () { return read("splash_v1", false); },
-    setSplashDone: function () { write("splash_v1", true); },
     loadTemplates: function () {
       var custom = read("templates", []);
       return Templates.DEFAULTS.concat(custom);

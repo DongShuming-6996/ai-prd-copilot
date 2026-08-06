@@ -140,7 +140,7 @@
     },
 
     showSplash: function () {
-      if (Store.isSplashDone()) return;
+      // 演示版：每次打开/刷新页面都展示开屏说明（访客零配置提示），不做一次性记忆
       var mask = document.createElement("div");
       mask.className = "modal-mask";
       mask.innerHTML =
@@ -149,7 +149,6 @@
         '<div class="row" style="justify-content:flex-end;margin-top:16px;margin-bottom:0"><button class="btn primary" id="splash-ok">确认</button></div></div>';
       document.body.appendChild(mask);
       document.getElementById("splash-ok").addEventListener("click", function () {
-        Store.setSplashDone();
         document.body.removeChild(mask);
       });
     },
