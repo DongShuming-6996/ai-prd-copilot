@@ -5,10 +5,20 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const dns = require("node:dns");
-const { handleAction, hasServerKey, diag } = require("./lib/ai-proxy.js");
 
-// 强制 DNS IPv4 优先，避免部分网络环境 IPv6 不通导致 fetch 失败
-dns.setDefaultResultOrder("ipv4first");
+const ROOT = __dirname;
+
+// 加载 .env.local —— 必须在 require lib/ai-proxy.js 之前，
+// 因为它加载时会读取 AI_API_BASE / USAGE_LIMIT 等环境变量
+const envLocalPath = path.join(ROOT, ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  for (const line of fs.readFileSync(envLocalPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
 
 // 可选：指定 DNS 服务器（逗号分隔），用于绕过本机 DNS 污染
 // 例：AI_DNS_SERVERS=223.5.5.5,119.29.29.29
@@ -22,20 +32,13 @@ if (dnsServers) {
   );
 }
 
+// 强制 DNS IPv4 优先，避免部分网络环境 IPv6 不通导致连接失败
+dns.setDefaultResultOrder("ipv4first");
+
+const { handleAction, hasServerKey, diag } = require("./lib/ai-proxy.js");
+
 const PORT = Number(process.env.PORT || 4100);
 const HOST = process.env.HOST || "127.0.0.1";
-const ROOT = __dirname;
-
-// 加载 .env.local（零依赖实现，避免 API Key 出现在命令行历史）
-const envLocalPath = path.join(ROOT, ".env.local");
-if (fs.existsSync(envLocalPath)) {
-  for (const line of fs.readFileSync(envLocalPath, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
-    if (m && !process.env[m[1]]) {
-      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-    }
-  }
-}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
