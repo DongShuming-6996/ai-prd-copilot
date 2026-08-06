@@ -54,23 +54,6 @@
   var DICTS = Templates.DICTS;
   var PRESET_TAGS = Templates.PRESET_TAGS;
 
-  function insertTableInto(area) {
-    var rows = parseInt(window.prompt("表格行数（不含表头，默认 3）", "3"), 10);
-    var cols = parseInt(window.prompt("表格列数（默认 3）", "3"), 10);
-    rows = Math.min(10, Math.max(1, rows || 3));
-    cols = Math.min(8, Math.max(1, cols || 3));
-    var html = '<table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin:8px 0"><thead><tr>';
-    for (var c = 1; c <= cols; c++) html += "<th>表头" + c + "</th>";
-    html += "</tr></thead><tbody>";
-    for (var r = 1; r <= rows; r++) {
-      html += "<tr>";
-      for (var c2 = 1; c2 <= cols; c2++) html += "<td><br></td>";
-      html += "</tr>";
-    }
-    html += "</tbody></table><p><br></p>";
-    insertHtmlAtCaret(area, html);
-  }
-
   function isSelIn(area) {
     var sel = window.getSelection();
     return !!(sel && sel.rangeCount && area.contains(sel.getRangeAt(0).commonAncestorContainer));
@@ -222,14 +205,26 @@
       this.state.projects.forEach(function (p) { (p.tags || []).forEach(function (t) { tagSet[t] = true; }); });
       PRESET_TAGS.forEach(function (t) { tagSet[t] = true; });
       var tagList = Object.keys(tagSet);
+      var busSet = {};
+      var deptSet = {};
+      DICTS.businessLines.forEach(function (b) { busSet[b] = true; });
+      DICTS.depts.forEach(function (d) { deptSet[d] = true; });
+      Store.loadCustomBusiness().forEach(function (b) { busSet[b] = true; });
+      Store.loadCustomDept().forEach(function (d) { deptSet[d] = true; });
+      this.state.projects.forEach(function (p) {
+        (p.businessLine || []).forEach(function (b) { busSet[b] = true; });
+        (p.dept || []).forEach(function (d) { deptSet[d] = true; });
+      });
+      var busList = Object.keys(busSet);
+      var deptList = Object.keys(deptSet);
 
       var html = '<h1 class="page-title">我的 PRD</h1>';
       html += '<div class="card filter-bar">';
       html += '<div class="row" style="margin-bottom:10px"><input type="text" id="f-keyword" placeholder="搜索名称 / 内容 / 标签…" value="' + esc(f.keyword) + '" style="flex:1">';
       html += '<button class="btn sm" id="f-clear">清除筛选</button></div>';
       html += '<div class="row"><span class="flabel">时间</span><div class="chips" id="f-time">' + chipHTML([["all", "全部"], ["7", "近7天"], ["30", "近30天"], ["90", "近90天"]], [f.time], "time") + "</div></div>";
-      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="f-business">' + chipHTML(DICTS.businessLines, f.business, "business") + "</div></div>";
-      html += '<div class="row"><span class="flabel">协作部门</span><div class="chips" id="f-dept">' + chipHTML(DICTS.depts, f.dept, "dept") + "</div></div>";
+      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="f-business">' + chipHTML(busList, f.business, "business") + "</div></div>";
+      html += '<div class="row"><span class="flabel">协作部门</span><div class="chips" id="f-dept">' + chipHTML(deptList, f.dept, "dept") + "</div></div>";
       html += '<div class="row"><span class="flabel">优先级</span><div class="chips" id="f-priority">' + chipHTML(DICTS.priorities, f.priority, "priority") + "</div></div>";
       html += '<div class="row"><span class="flabel">状态</span><div class="chips" id="f-status">' + chipHTML(Object.keys(STATUS_TEXT), f.status, "status") + "</div></div>";
       html += '<div class="row"><span class="flabel">标签</span><div class="chips" id="f-tags">' + chipHTML(tagList, f.tags, "tags") + "</div>";
@@ -383,13 +378,23 @@
       PRESET_TAGS.forEach(function (t) { tagSet[t] = true; });
       form.tags.forEach(function (t) { tagSet[t] = true; });
       var tagList = Object.keys(tagSet);
+      var customBus = Store.loadCustomBusiness();
+      var customDept = Store.loadCustomDept();
+      var busList = DICTS.businessLines.concat(customBus);
+      var deptList = DICTS.depts.concat(customDept);
+      form.businessLine.forEach(function (b) { if (busList.indexOf(b) < 0) busList.push(b); });
+      form.dept.forEach(function (d) { if (deptList.indexOf(d) < 0) deptList.push(d); });
 
       var html = '<h1 class="page-title">' + (id ? "配置框架（返回修改）" : "新建 PRD · 第 1 步 / 共 3 步") + "</h1>";
       html += '<div class="card">';
       html += '<div class="edit-title">① 基本信息</div>';
       html += '<div class="row"><span class="flabel">项目名称 *</span><input type="text" id="s-name" placeholder="如：【美团-搜索】酒吧搜词推荐页头图改版" value="' + esc(form.name) + '"></div>';
-      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="s-business">' + chipHTML(DICTS.businessLines, form.businessLine, "businessLine") + "</div></div>";
-      html += '<div class="row"><span class="flabel">协作部门</span><div class="chips" id="s-dept">' + chipHTML(DICTS.depts, form.dept, "dept") + "</div></div>";
+      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="s-business">' + chipHTML(busList, form.businessLine, "businessLine") + "</div>";
+      html += '<input type="text" id="s-newbus" placeholder="新增业务线" style="width:130px">';
+      html += '<button class="btn sm" id="s-busadd">添加</button></div>';
+      html += '<div class="row"><span class="flabel">协作部门</span><div class="chips" id="s-dept">' + chipHTML(deptList, form.dept, "dept") + "</div>";
+      html += '<input type="text" id="s-newdept" placeholder="新增部门" style="width:130px">';
+      html += '<button class="btn sm" id="s-deptadd">添加</button></div>';
       html += '<div class="row"><span class="flabel">优先级</span><div class="chips" id="s-priority">' + chipHTML(DICTS.priorities, [form.priority], "priority") + "</div></div>";
       html += '<div class="row"><span class="flabel">标签</span><div class="chips" id="s-tags">' + chipHTML(tagList, form.tags, "tags") + "</div>";
       html += '<input type="text" id="s-newtag" placeholder="新增标签" style="width:140px">';
@@ -415,6 +420,24 @@
       document.getElementById("app").innerHTML = html;
 
       document.getElementById("s-name").addEventListener("input", function (e) { form.name = e.target.value; });
+      document.getElementById("s-busadd").addEventListener("click", function () {
+        var v = document.getElementById("s-newbus").value.trim();
+        if (!v) return;
+        var list = Store.loadCustomBusiness();
+        if (list.indexOf(v) < 0) list.push(v);
+        Store.saveCustomBusiness(list);
+        if (form.businessLine.indexOf(v) < 0) form.businessLine.push(v);
+        self.renderStep1(id);
+      });
+      document.getElementById("s-deptadd").addEventListener("click", function () {
+        var v = document.getElementById("s-newdept").value.trim();
+        if (!v) return;
+        var list = Store.loadCustomDept();
+        if (list.indexOf(v) < 0) list.push(v);
+        Store.saveCustomDept(list);
+        if (form.dept.indexOf(v) < 0) form.dept.push(v);
+        self.renderStep1(id);
+      });
       document.getElementById("s-tagadd").addEventListener("click", function () {
         var v = document.getElementById("s-newtag").value.trim();
         if (v && form.tags.indexOf(v) < 0) { form.tags.push(v); self.renderStep1(id); }
@@ -562,9 +585,7 @@
         html += '<button type="button" class="rte-btn" data-cmd="bold" title="加粗"><b>B</b></button>';
         html += '<button type="button" class="rte-btn" data-cmd="italic" title="斜体"><i>I</i></button>';
         html += '<button type="button" class="rte-btn" data-cmd="underline" title="下划线"><u>U</u></button>';
-        html += '<select class="rte-select" data-cmd="fontSize" title="字号"><option value="3">正文</option><option value="2">小</option><option value="4">大</option><option value="5">特大</option></select>';
         html += '<input type="color" class="rte-color" data-cmd="foreColor" value="#c8ff3d" title="文字颜色">';
-        html += '<button type="button" class="rte-btn" data-cmd="table" title="插入表格">表格</button>';
         html += '<button type="button" class="rte-btn" data-cmd="image" title="插入图片">图片</button>';
         html += "</div>";
         html += '<div class="rte-area" contenteditable="true" data-sec="' + sec.key + '" data-placeholder="在此填写本章节内容……">' + initHtml + "</div>";
@@ -600,22 +621,10 @@
       document.querySelectorAll(".rte-toolbar").forEach(function (bar) {
         var area = bar.nextElementSibling;
         bar.querySelectorAll("[data-cmd]").forEach(function (btn) {
-          if (btn.tagName === "SELECT") {
-            btn.addEventListener("change", function () {
-              var sel = window.getSelection();
-              if (sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-                document.execCommand("fontSize", false, btn.value);
-              } else {
-                window.alert("请先选中要调整字号的文字");
-              }
-            });
-            return;
-          }
           btn.addEventListener("mousedown", function (e) { e.preventDefault(); });
           btn.addEventListener("click", function () {
             var cmd = btn.getAttribute("data-cmd");
-            if (cmd === "table") insertTableInto(area);
-            else if (cmd === "image") pickImageFor(area);
+            if (cmd === "image") pickImageFor(area);
             else {
               area.focus();
               document.execCommand(cmd, false, null);

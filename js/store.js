@@ -157,6 +157,10 @@
     },
     loadCustomSections: function () { return read("custom_sections", []); },
     saveCustomSections: function (list) { write("custom_sections", list); },
+    loadCustomBusiness: function () { return read("custom_business", []); },
+    saveCustomBusiness: function (list) { write("custom_business", list); },
+    loadCustomDept: function () { return read("custom_dept", []); },
+    saveCustomDept: function (list) { write("custom_dept", list); },
 
     // ---------- 附件（IndexedDB 存 Blob，不占 localStorage 配额） ----------
     attachSave: function (id, blob) {
