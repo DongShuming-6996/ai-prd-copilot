@@ -107,6 +107,9 @@
     route: function () {
       this.updateNav();
       var r = parseHash();
+      if (r.page !== "new") {
+        this.state.form._key = ""; // 离开新建页后清空表单标记，下次进入重新初始化
+      }
       if (r.page === "new") this.renderStep1(r.id);
       else if (r.page === "edit") this.renderStep2(r.id);
       else if (r.page === "preview") this.renderStep3(r.id);
@@ -288,6 +291,7 @@
       if (id) {
         var p = Store.getProject(id);
         if (p) {
+          form._key = "p:" + p.id;
           form.id = p.id;
           form.name = p.name;
           form.businessLine = p.businessLine.slice();
@@ -296,7 +300,8 @@
           form.tags = p.tags.slice();
           form.selectedSections = p.sections.map(function (x) { return x.key; });
         }
-      } else {
+      } else if (form._key !== "new") {
+        form._key = "new";
         form.id = null;
         form.name = "";
         form.businessLine = [];
@@ -309,13 +314,14 @@
       var tagSet = {};
       Store.loadProjects().forEach(function (x) { (x.tags || []).forEach(function (t) { tagSet[t] = true; }); });
       PRESET_TAGS.forEach(function (t) { tagSet[t] = true; });
+      form.tags.forEach(function (t) { tagSet[t] = true; });
       var tagList = Object.keys(tagSet);
 
       var html = '<h1 class="page-title">' + (id ? "配置框架（返回修改）" : "新建 PRD · 第 1 步 / 共 3 步") + "</h1>";
       html += '<div class="card">';
       html += '<div class="edit-title">① 基本信息</div>';
       html += '<div class="row"><span class="flabel">项目名称 *</span><input type="text" id="s-name" placeholder="如：【美团-搜索】酒吧搜词推荐页头图改版" value="' + esc(form.name) + '"></div>';
-      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="s-business">' + chipHTML(DICTS.businessLines, form.businessLine, "business") + "</div></div>";
+      html += '<div class="row"><span class="flabel">业务线</span><div class="chips" id="s-business">' + chipHTML(DICTS.businessLines, form.businessLine, "businessLine") + "</div></div>";
       html += '<div class="row"><span class="flabel">协作部门</span><div class="chips" id="s-dept">' + chipHTML(DICTS.depts, form.dept, "dept") + "</div></div>";
       html += '<div class="row"><span class="flabel">优先级</span><div class="chips" id="s-priority">' + chipHTML(DICTS.priorities, [form.priority], "priority") + "</div></div>";
       html += '<div class="row"><span class="flabel">标签</span><div class="chips" id="s-tags">' + chipHTML(tagList, form.tags, "tags") + "</div>";
@@ -672,7 +678,7 @@
       document.getElementById("pv-done").addEventListener("click", function () {
         p.status = "done";
         Store.upsertProject(p);
-        location.hash = "#/project/" + encodeURIComponent(p.id);
+        location.hash = "#/";
       });
     },
 
