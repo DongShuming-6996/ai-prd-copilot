@@ -5,7 +5,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const dns = require("node:dns");
-const { handleAction, hasServerKey } = require("./lib/ai-proxy.js");
+const { handleAction, hasServerKey, diag } = require("./lib/ai-proxy.js");
 
 // 强制 DNS IPv4 优先，避免部分网络环境 IPv6 不通导致 fetch 失败
 dns.setDefaultResultOrder("ipv4first");
@@ -86,6 +86,12 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/status") {
     send(res, 200, JSON.stringify({ hasEnvKey: hasServerKey() }), "application/json; charset=utf-8");
+    return;
+  }
+
+  if (url.pathname === "/api/diag") {
+    const result = await diag();
+    send(res, 200, JSON.stringify(result, null, 2), "application/json; charset=utf-8");
     return;
   }
 
