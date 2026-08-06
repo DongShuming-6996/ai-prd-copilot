@@ -906,20 +906,24 @@
     },
 
     printPdf: function (p) {
-      var html = Export.exportHtml(p);
-      var iframe = document.createElement("iframe");
-      iframe.setAttribute("aria-hidden", "true");
-      iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
-      document.body.appendChild(iframe);
-      var doc = iframe.contentWindow.document;
-      doc.open();
-      doc.write(html);
-      doc.close();
-      setTimeout(function () {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        setTimeout(function () { document.body.removeChild(iframe); }, 2000);
-      }, 400);
+      // 方案：把导出版本注入页面内隐藏打印区，再同步调用 window.print()。
+      // 相比「0x0 隐藏 iframe + 延迟 print()」，不会被浏览器静默拦截，桌面/手机均可导出 PDF。
+      var full = Export.exportHtml(p);
+      var body = full.replace(/^[\s\S]*?<body>/, "").replace(/<\/body>[\s\S]*$/, "");
+      var root = document.getElementById("print-root");
+      if (!root) {
+        root = document.createElement("div");
+        root.id = "print-root";
+        root.setAttribute("aria-hidden", "true");
+        document.body.appendChild(root);
+      }
+      root.innerHTML = body;
+      var cleanup = function () {
+        root.innerHTML = "";
+        window.removeEventListener("afterprint", cleanup);
+      };
+      window.addEventListener("afterprint", cleanup);
+      window.print();
     },
   };
 
