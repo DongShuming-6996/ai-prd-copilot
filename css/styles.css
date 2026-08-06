@@ -524,6 +524,66 @@ body.has-fixed .container { padding-bottom: 140px; }
   white-space: pre-wrap;
 }
 
+/* ---------- 富文本编辑器 ---------- */
+
+.rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: rgba(255, 255, 255, 0.045);
+}
+.rte-btn {
+  min-width: 32px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.rte-btn:hover { border-color: var(--neon-dim); color: #fff; }
+.rte-select { width: auto; height: 28px; padding: 0 6px; font-size: 12px; }
+.rte-color {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.rte-area {
+  min-height: 200px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  line-height: 1.8;
+  font-size: 14px;
+  outline: none;
+}
+.rte-area:focus {
+  border-color: var(--neon-dim);
+  box-shadow: 0 0 0 3px rgba(200, 255, 61, 0.08);
+}
+.rte-area:empty::before {
+  content: attr(data-placeholder);
+  color: #5d6675;
+  pointer-events: none;
+}
+.rte-area img { max-width: 100%; border-radius: 6px; }
+.rte-area table { margin: 8px 0; }
+.rte-area ul, .rte-area ol { padding-left: 22px; }
+
 .q-card {
   border: 1px solid var(--line);
   border-radius: 12px;

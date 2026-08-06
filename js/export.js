@@ -23,7 +23,7 @@
     project.sections.forEach(function (s) {
       lines.push("## " + s.title);
       lines.push("");
-      lines.push((s.content || "").trim() || "（待填写）");
+      lines.push(htmlToMarkdown(s.content || "").trim() || "（待填写）");
       lines.push("");
     });
     return lines.join("\n");
@@ -55,8 +55,43 @@
       .join("\n");
   }
 
+  function isHtml(text) {
+    return /<[a-z][\s\S]*>/i.test(String(text || "").trim());
+  }
+
+  // 富文本 HTML → Markdown（用于导出 .md）
+  function htmlToMarkdown(html) {
+    if (!isHtml(html)) return String(html || "");
+    var doc = new DOMParser().parseFromString(html, "text/html");
+    function walk(node) {
+      if (node.nodeType === 3) return node.textContent || "";
+      if (node.nodeType !== 1) return "";
+      var tag = node.tagName.toLowerCase();
+      var inner = Array.prototype.map.call(node.childNodes, walk).join("");
+      switch (tag) {
+        case "b": case "strong": return "**" + inner + "**";
+        case "i": case "em": return "*" + inner + "*";
+        case "u": return "__" + inner + "__";
+        case "h1": return "# " + inner + "\n";
+        case "h2": return "## " + inner + "\n";
+        case "h3": return "### " + inner + "\n";
+        case "li": return "- " + inner + "\n";
+        case "br": return "\n";
+        case "p": case "div": return inner + "\n";
+        case "tr":
+          return "| " + Array.prototype.map.call(node.children, function (c) { return (c.textContent || "").trim(); }).join(" | ") + " |\n";
+        case "table": return "\n" + inner + "\n";
+        case "img": return node.getAttribute("alt") ? "![" + node.getAttribute("alt") + "](" + (node.getAttribute("src") || "") + ")" : "";
+        case "font": return inner;
+        default: return inner;
+      }
+    }
+    return walk(doc.body).replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   function renderContent(text) {
-    return markdownToHtml(text || "（待填写）");
+    var t = text || "";
+    return isHtml(t) ? t : markdownToHtml(t || "（待填写）");
   }
 
   function exportHtml(project) {
@@ -66,7 +101,7 @@
     parts.push("<h1>" + escHtml(project.name) + "</h1>");
     project.sections.forEach(function (s) {
       parts.push("<h2>" + escHtml(s.title) + "</h2>");
-      parts.push(markdownToHtml(s.content || "（待填写）"));
+      parts.push(renderContent(s.content));
     });
     parts.push("</body></html>");
     return parts.join("\n");

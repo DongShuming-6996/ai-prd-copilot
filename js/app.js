@@ -54,6 +54,46 @@
   var DICTS = Templates.DICTS;
   var PRESET_TAGS = Templates.PRESET_TAGS;
 
+  function insertTableInto(area) {
+    var rows = parseInt(window.prompt("表格行数（不含表头，默认 3）", "3"), 10);
+    var cols = parseInt(window.prompt("表格列数（默认 3）", "3"), 10);
+    rows = Math.min(10, Math.max(1, rows || 3));
+    cols = Math.min(8, Math.max(1, cols || 3));
+    var html = '<table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;margin:8px 0"><thead><tr>';
+    for (var c = 1; c <= cols; c++) html += "<th>表头" + c + "</th>";
+    html += "</tr></thead><tbody>";
+    for (var r = 1; r <= rows; r++) {
+      html += "<tr>";
+      for (var c2 = 1; c2 <= cols; c2++) html += "<td><br></td>";
+      html += "</tr>";
+    }
+    html += "</tbody></table><p><br></p>";
+    area.focus();
+    document.execCommand("insertHTML", false, html);
+  }
+
+  function pickImageFor(area) {
+    var input = document.getElementById("rte-img-input");
+    if (!input) return;
+    input.onchange = function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        window.alert("图片超过 2MB，请压缩后重新插入");
+        input.value = "";
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        area.focus();
+        document.execCommand("insertHTML", false, '<img src="' + reader.result + '" alt="图片" style="max-width:100%;border-radius:6px">');
+      };
+      reader.readAsDataURL(file);
+      input.value = "";
+    };
+    input.click();
+  }
+
   var App = {
     state: {
       form: { id: null, name: "", businessLine: [], dept: [], priority: "", tags: [], selectedSections: [], newSecTitle: "", newSecDesc: "" },
@@ -485,11 +525,22 @@
       });
       html += "</div></div>";
       html += '<div class="col wide"><div id="e-sections">';
+      html += '<input type="file" id="rte-img-input" accept="image/*" style="display:none">';
       p.sections.forEach(function (sec) {
+        var initHtml = sec.content ? Export.renderContent(sec.content) : "";
         html += '<div class="edit-block" id="sec-' + sec.key + '">';
         html += '<div class="edit-title">' + esc(sec.title) + "</div>";
         if (sec.description) html += '<div class="edit-desc">' + esc(sec.description) + "</div>";
-        html += '<textarea data-sec="' + sec.key + '" placeholder="在此填写本章节内容……" rows="' + Math.min(16, Math.max(6, (sec.content || "").split("\n").length + 3)) + '">' + esc(sec.content) + "</textarea>";
+        html += '<div class="rte-toolbar">';
+        html += '<button type="button" class="rte-btn" data-cmd="bold" title="加粗"><b>B</b></button>';
+        html += '<button type="button" class="rte-btn" data-cmd="italic" title="斜体"><i>I</i></button>';
+        html += '<button type="button" class="rte-btn" data-cmd="underline" title="下划线"><u>U</u></button>';
+        html += '<select class="rte-select" data-cmd="fontSize" title="字号"><option value="3">正文</option><option value="2">小</option><option value="4">大</option><option value="5">特大</option></select>';
+        html += '<input type="color" class="rte-color" data-cmd="foreColor" value="#c8ff3d" title="文字颜色">';
+        html += '<button type="button" class="rte-btn" data-cmd="table" title="插入表格">表格</button>';
+        html += '<button type="button" class="rte-btn" data-cmd="image" title="插入图片">图片</button>';
+        html += "</div>";
+        html += '<div class="rte-area" contenteditable="true" data-sec="' + sec.key + '" data-placeholder="在此填写本章节内容……">' + initHtml + "</div>";
         html += "</div>";
       });
       html += '<div class="card"><div class="edit-title">附件 <span class="muted" style="font-weight:400;font-size:12px">（单个不超过 10MB）</span></div>';
@@ -505,18 +556,48 @@
       document.getElementById("app").innerHTML = html;
 
       document.getElementById("e-name").addEventListener("input", function (e) { p.name = e.target.value || "未命名项目"; Store.upsertProject(p); });
-      document.querySelectorAll("textarea[data-sec]").forEach(function (ta) {
-        ta.addEventListener("input", function () {
-          var key = ta.getAttribute("data-sec");
+      document.querySelectorAll(".rte-area").forEach(function (area) {
+        area.addEventListener("input", function () {
+          var key = area.getAttribute("data-sec");
           var sec = p.sections.find(function (x) { return x.key === key; });
           if (sec) {
-            sec.content = ta.value;
+            sec.content = area.innerHTML;
             Store.upsertProject(p);
             self.updateStep2Meta(p);
             var tag = document.querySelector('.sidenav .item[data-jump="' + key + '"] .tag');
-            if (tag) { tag.className = "tag" + (ta.value.trim() ? " ok" : ""); tag.textContent = ta.value.trim() ? "✓" : "空"; }
+            var has = area.textContent.trim();
+            if (tag) { tag.className = "tag" + (has ? " ok" : ""); tag.textContent = has ? "✓" : "空"; }
           }
         });
+      });
+      document.querySelectorAll(".rte-toolbar").forEach(function (bar) {
+        var area = bar.nextElementSibling;
+        bar.querySelectorAll("[data-cmd]").forEach(function (btn) {
+          if (btn.tagName === "SELECT") {
+            btn.addEventListener("change", function () {
+              area.focus();
+              document.execCommand("fontSize", false, btn.value);
+            });
+            return;
+          }
+          btn.addEventListener("mousedown", function (e) { e.preventDefault(); });
+          btn.addEventListener("click", function () {
+            var cmd = btn.getAttribute("data-cmd");
+            if (cmd === "table") insertTableInto(area);
+            else if (cmd === "image") pickImageFor(area);
+            else {
+              area.focus();
+              document.execCommand(cmd, false, null);
+            }
+          });
+        });
+        var color = bar.querySelector(".rte-color");
+        if (color) {
+          color.addEventListener("input", function () {
+            area.focus();
+            document.execCommand("foreColor", false, color.value);
+          });
+        }
       });
       document.querySelectorAll("[data-jump]").forEach(function (el) {
         el.addEventListener("click", function () {
