@@ -10,6 +10,18 @@ const { handleAction, hasServerKey } = require("./lib/ai-proxy.js");
 // 强制 DNS IPv4 优先，避免部分网络环境 IPv6 不通导致 fetch 失败
 dns.setDefaultResultOrder("ipv4first");
 
+// 可选：指定 DNS 服务器（逗号分隔），用于绕过本机 DNS 污染
+// 例：AI_DNS_SERVERS=223.5.5.5,119.29.29.29
+const dnsServers = process.env.AI_DNS_SERVERS;
+if (dnsServers) {
+  dns.setServers(
+    dnsServers
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+
 const PORT = Number(process.env.PORT || 4100);
 const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
