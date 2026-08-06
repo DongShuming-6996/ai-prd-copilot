@@ -10,6 +10,17 @@ const PORT = Number(process.env.PORT || 4100);
 const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
 
+// 加载 .env.local（零依赖实现，避免 API Key 出现在命令行历史）
+const envLocalPath = path.join(ROOT, ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  for (const line of fs.readFileSync(envLocalPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
