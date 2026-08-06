@@ -65,6 +65,43 @@
       var self = this;
       window.addEventListener("hashchange", function () { self.route(); });
       this.route();
+      this.wireExit();
+      this.showSplash();
+    },
+
+    wireExit: function () {
+      var btn = document.getElementById("btn-exit");
+      if (!btn) return;
+      var self = this;
+      btn.addEventListener("click", function () {
+        if (!window.confirm("确认退出并清除你创建的 PRD？系统模拟的 50 条会保留。")) return;
+        var tasks = [];
+        Store.getUserProjects().forEach(function (p) {
+          (p.attachments || []).forEach(function (a) {
+            tasks.push(Store.attachRemove(a.id).catch(function () {}));
+          });
+        });
+        Promise.all(tasks).then(function () {
+          Store.clearUserProjects();
+          window.alert("已清除你创建的 PRD，系统模拟数据保留。");
+          self.route();
+        });
+      });
+    },
+
+    showSplash: function () {
+      if (Store.isSplashDone()) return;
+      var mask = document.createElement("div");
+      mask.className = "modal-mask";
+      mask.innerHTML =
+        '<div class="modal"><h3>欢迎使用 PRD Studio</h3>' +
+        '<p style="margin:10px 0;color:#cfd6e2;line-height:1.9">为了方便您的预览体验，您不需要完成登录或注册，系统中已有模拟的 50 条 PRD，方便您可以直接尝试筛选查找 PRD 或者写新的 PRD。</p>' +
+        '<div class="row" style="justify-content:flex-end;margin-top:16px;margin-bottom:0"><button class="btn primary" id="splash-ok">确认</button></div></div>';
+      document.body.appendChild(mask);
+      document.getElementById("splash-ok").addEventListener("click", function () {
+        Store.setSplashDone();
+        document.body.removeChild(mask);
+      });
     },
 
     route: function () {
@@ -211,10 +248,13 @@
         tags.forEach(function (t) { html += '<span class="tag ok">' + esc(t) + "</span>"; });
         if ((p.tags || []).length > 3) html += '<span class="tag">+' + ((p.tags || []).length - 3) + "</span>";
         html += "</div></div>";
+        if (p.simulated) html += '<span class="tag blue">系统模拟</span>';
         html += '<span class="tag ' + (p.status === "done" ? "ok" : p.status === "editing" ? "blue" : "") + '">' + (STATUS_TEXT[p.status] || "草稿") + "</span>";
         html += '<a href="#/project/' + encodeURIComponent(p.id) + '" class="btn sm">详情</a>';
-        html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
-        html += '<button class="btn sm danger" data-del="' + p.id + '">删除</button>';
+        if (!p.simulated) {
+          html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
+          html += '<button class="btn sm danger" data-del="' + p.id + '">删除</button>';
+        }
         html += "</div>";
       });
       body.innerHTML = html;
@@ -417,6 +457,10 @@
       if (!p) {
         this.clearFixedBar();
         document.getElementById("app").innerHTML = '<div class="card">项目不存在。<a href="#/" class="btn sm" style="margin-left:10px">返回列表</a></div>';
+        return;
+      }
+      if (p.simulated) {
+        this.renderDetail(id);
         return;
       }
       this.state.project = p;
@@ -652,15 +696,18 @@
       html += '<span class="tag ' + (p.status === "done" ? "ok" : p.status === "editing" ? "blue" : "") + '">' + (STATUS_TEXT[p.status] || "草稿") + "</span>";
       html += '<span class="tag">已填 ' + this.filled(p) + "/" + p.sections.length + "</span>";
       html += '<span class="tag">更新 ' + fmtTime(p.updatedAt) + "</span>";
+      if (p.simulated) html += '<span class="tag blue">系统模拟</span>';
       html += "</div></div>";
       html += '<div class="row" style="margin:0">';
       html += '<a href="#/" class="btn sm">返回列表</a>';
-      html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
-      html += '<button class="btn sm" id="d-status">' + (p.status === "done" ? "重新编辑" : "标记完成") + "</button>";
+      if (!p.simulated) {
+        html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
+        html += '<button class="btn sm" id="d-status">' + (p.status === "done" ? "重新编辑" : "标记完成") + "</button>";
+      }
       html += '<button class="btn sm" id="d-md">Markdown</button>';
       html += '<button class="btn sm" id="d-word">Word</button>';
       html += '<button class="btn sm" id="d-pdf">PDF</button>';
-      html += '<button class="btn sm danger" id="d-del">删除</button>';
+      if (!p.simulated) html += '<button class="btn sm danger" id="d-del">删除</button>';
       html += "</div></div>";
       html += '<div class="card preview-content" style="margin-top:14px">';
       p.sections.forEach(function (sec) {
@@ -678,7 +725,8 @@
         html += "</div>";
       }
       document.getElementById("app").innerHTML = html;
-      document.getElementById("d-status").addEventListener("click", function () {
+      var dStatus = document.getElementById("d-status");
+      if (dStatus) dStatus.addEventListener("click", function () {
         p.status = p.status === "done" ? "editing" : "done";
         Store.upsertProject(p);
         self.renderDetail(p.id);
@@ -686,7 +734,8 @@
       document.getElementById("d-md").addEventListener("click", function () { self.downloadMarkdown(p); });
       document.getElementById("d-word").addEventListener("click", function () { self.downloadWord(p); });
       document.getElementById("d-pdf").addEventListener("click", function () { self.printPdf(p); });
-      document.getElementById("d-del").addEventListener("click", function () {
+      var dDel = document.getElementById("d-del");
+      if (dDel) dDel.addEventListener("click", function () {
         if (!window.confirm("确认删除该项目？该操作不可恢复。")) return;
         Promise.all((p.attachments || []).map(function (a) { return Store.attachRemove(a.id).catch(function () {}); })).then(function () {
           Store.deleteProject(p.id);
