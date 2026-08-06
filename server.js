@@ -4,7 +4,11 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const dns = require("node:dns");
 const { handleAction, hasServerKey } = require("./lib/ai-proxy.js");
+
+// 强制 DNS IPv4 优先，避免部分网络环境 IPv6 不通导致 fetch 失败
+dns.setDefaultResultOrder("ipv4first");
 
 const PORT = Number(process.env.PORT || 4100);
 const HOST = process.env.HOST || "127.0.0.1";
