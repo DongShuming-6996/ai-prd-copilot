@@ -132,8 +132,8 @@
           });
         });
         Promise.all(tasks).then(function () {
-          Store.clearUserProjects();
-          window.alert("已清除你创建的 PRD，系统模拟数据保留。");
+          Store.clearUserData();
+          window.alert("已清除你创建的 PRD 及自定义章节/业务线/协作部门/框架模板，系统模拟数据保留。");
           self.route();
         });
       });
@@ -789,16 +789,10 @@
       });
       this.setFixedBar(
         '<button class="btn" id="pv-back">← 返回上一步</button>' +
-        '<button class="btn" id="pv-md">导出 Markdown</button>' +
-        '<button class="btn" id="pv-word">导出 Word</button>' +
-        '<button class="btn" id="pv-pdf">导出 PDF</button>' +
         '<span class="spacer"></span>' +
         '<button class="btn primary" id="pv-done">完成</button>'
       );
       document.getElementById("pv-back").addEventListener("click", function () { location.hash = "#/edit/" + encodeURIComponent(p.id); });
-      document.getElementById("pv-md").addEventListener("click", function () { self.downloadMarkdown(p); });
-      document.getElementById("pv-word").addEventListener("click", function () { self.downloadWord(p); });
-      document.getElementById("pv-pdf").addEventListener("click", function () { self.printPdf(p); });
       document.getElementById("pv-done").addEventListener("click", function () {
         p.status = "done";
         Store.upsertProject(p);
@@ -834,9 +828,6 @@
         html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
         html += '<button class="btn sm" id="d-status">' + (p.status === "done" ? "重新编辑" : "标记完成") + "</button>";
       }
-      html += '<button class="btn sm" id="d-md">Markdown</button>';
-      html += '<button class="btn sm" id="d-word">Word</button>';
-      html += '<button class="btn sm" id="d-pdf">PDF</button>';
       if (!p.simulated) html += '<button class="btn sm danger" id="d-del">删除</button>';
       html += "</div></div>";
       html += '<div class="card preview-content" style="margin-top:14px">';
@@ -861,9 +852,6 @@
         Store.upsertProject(p);
         self.renderDetail(p.id);
       });
-      document.getElementById("d-md").addEventListener("click", function () { self.downloadMarkdown(p); });
-      document.getElementById("d-word").addEventListener("click", function () { self.downloadWord(p); });
-      document.getElementById("d-pdf").addEventListener("click", function () { self.printPdf(p); });
       var dDel = document.getElementById("d-del");
       if (dDel) dDel.addEventListener("click", function () {
         if (!window.confirm("确认删除该项目？该操作不可恢复。")) return;
@@ -878,51 +866,6 @@
           if (att) self.downloadAttachment(att);
         });
       });
-    },
-
-    // ---------- 导出 ----------
-
-    downloadMarkdown: function (p) {
-      var md = Export.projectToMarkdown(p);
-      var blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = p.name.replace(/[\/\\:*?"<>|]/g, "-") + ".md";
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-
-    downloadWord: function (p) {
-      var html = Export.exportHtml(p);
-      var blob = new Blob(["\ufeff" + html], { type: "application/msword" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = p.name.replace(/[\/\\:*?"<>|]/g, "-") + ".doc";
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-
-    printPdf: function (p) {
-      // 方案：把导出版本注入页面内隐藏打印区，再同步调用 window.print()。
-      // 相比「0x0 隐藏 iframe + 延迟 print()」，不会被浏览器静默拦截，桌面/手机均可导出 PDF。
-      var full = Export.exportHtml(p);
-      var body = full.replace(/^[\s\S]*?<body>/, "").replace(/<\/body>[\s\S]*$/, "");
-      var root = document.getElementById("print-root");
-      if (!root) {
-        root = document.createElement("div");
-        root.id = "print-root";
-        root.setAttribute("aria-hidden", "true");
-        document.body.appendChild(root);
-      }
-      root.innerHTML = body;
-      var cleanup = function () {
-        root.innerHTML = "";
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
-      window.print();
     },
   };
 

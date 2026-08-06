@@ -143,7 +143,12 @@
       this.saveUserProjects(this.loadUserProjects().filter(function (p) { return p.id !== id; }));
     },
     getUserProjects: function () { return this.loadUserProjects(); },
-    clearUserProjects: function () { this.saveUserProjects([]); },
+    clearUserData: function () {
+      // 退出时清除该用户创建的全部数据：PRD、自定义章节/业务线/协作部门/框架模板
+      ["projects", "templates", "custom_sections", "custom_business", "custom_dept"].forEach(function (k) {
+        try { localStorage.removeItem(PREFIX + k); } catch (e) {}
+      });
+    },
     loadTemplates: function () {
       var custom = read("templates", []);
       return Templates.DEFAULTS.concat(custom);
