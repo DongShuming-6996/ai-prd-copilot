@@ -14,6 +14,14 @@
 
   var DEFAULT_PREFS = { askDataSource: true, askDeadline: true, checkCalcLogic: false };
 
+  var DICTS = {
+    businessLines: ["搜索", "推荐", "交易", "内容", "增长", "数据"],
+    depts: ["BI", "后端", "前端", "测试", "视觉", "算法", "数据"],
+    priorities: ["P0", "P1", "P2", "P3"],
+  };
+
+  var PRESET_TAGS = ["新增功能", "迭代优化", "Bug修复", "技术重构", "数据需求", "体验优化"];
+
   var DEFAULTS = [
     { id: "qc-8", name: "质检标准 8 节", sections: DEFAULT_SECTIONS, crossDeptDefault: true, prefs: Object.assign({}, DEFAULT_PREFS) },
     {
@@ -35,5 +43,11 @@
     return DEFAULTS.find(function (t) { return t.id === id; }) || DEFAULTS[0];
   }
 
-  global.Templates = { DEFAULTS: DEFAULTS, DEFAULT_PREFS: DEFAULT_PREFS, findTemplate: findTemplate };
+  global.Templates = {
+    DEFAULTS: DEFAULTS,
+    DEFAULT_PREFS: DEFAULT_PREFS,
+    findTemplate: findTemplate,
+    DICTS: DICTS,
+    PRESET_TAGS: PRESET_TAGS,
+  };
 })(window);

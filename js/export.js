@@ -10,6 +10,15 @@
     lines.push("# " + project.name);
     lines.push("");
     lines.push("> 由 PRD Studio 整理 · " + fmtTime(project.updatedAt || Date.now()));
+    var meta = [];
+    if (project.businessLine && project.businessLine.length) meta.push("业务线：" + project.businessLine.join(" / "));
+    if (project.dept && project.dept.length) meta.push("协作部门：" + project.dept.join(" / "));
+    if (project.priority) meta.push("优先级：" + project.priority);
+    if (project.tags && project.tags.length) meta.push("标签：" + project.tags.join(" / "));
+    if (meta.length) {
+      lines.push("> " + meta.join("　"));
+      lines.push("");
+    }
     lines.push("");
     project.sections.forEach(function (s) {
       lines.push("## " + s.title);
@@ -46,6 +55,10 @@
       .join("\n");
   }
 
+  function renderContent(text) {
+    return markdownToHtml(text || "（待填写）");
+  }
+
   function exportHtml(project) {
     var parts = [];
     parts.push("<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>" + escHtml(project.name) + "</title>");
@@ -59,5 +72,5 @@
     return parts.join("\n");
   }
 
-  global.Export = { projectToMarkdown: projectToMarkdown, exportHtml: exportHtml };
+  global.Export = { projectToMarkdown: projectToMarkdown, exportHtml: exportHtml, renderContent: renderContent };
 })(window);
