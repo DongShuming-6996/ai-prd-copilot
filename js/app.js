@@ -410,7 +410,15 @@
             .then(function (qRes) {
               var now = Date.now();
               var questions = (qRes && qRes.questions) || [];
-              var questionsError = questions.length ? "" : "模型未返回有效追问（可能未按 JSON 格式输出）";
+              var fallbackMsg = "";
+              if (!questions.length && !(qRes && qRes.usedDemo)) {
+                try {
+                  questions = Demo.generateQuestions(draft.sections, s.materials, s.prefs);
+                  fallbackMsg = "真实模型追问失败，已用内置生成器补充";
+                } catch (e) {
+                  fallbackMsg = "追问生成失败：" + (e && e.message ? e.message : "未知错误");
+                }
+              }
               var project = {
                 id: Store.uid(),
                 name: draft.name,
@@ -432,8 +440,8 @@
               s.generating = false;
               s.materials = [];
               location.hash = "#/project/" + encodeURIComponent(project.id);
-              if (questionsError) {
-                window.alert("初稿已生成，但追问生成失败：" + questionsError + "\n可在项目页点击「重新生成追问」重试。");
+              if (fallbackMsg) {
+                window.alert("初稿已生成，" + fallbackMsg + "。");
               }
             });
         })
