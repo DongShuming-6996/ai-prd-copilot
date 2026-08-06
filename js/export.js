@@ -97,7 +97,7 @@
   function exportHtml(project) {
     var parts = [];
     parts.push("<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>" + escHtml(project.name) + "</title>");
-    parts.push("<style>body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;color:#1a1a1a;max-width:820px;margin:24px auto;padding:0 20px;line-height:1.7}h1{font-size:22px;border-bottom:2px solid #c8ff3d;padding-bottom:8px}h2{font-size:16px;margin-top:26px;border-left:4px solid #c8ff3d;padding-left:8px}p{margin:6px 0}li{margin:3px 0}pre{background:#f6f7f5;padding:8px 10px;border-radius:6px;overflow-x:auto;font-size:12.5px}table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}</style></head><body>");
+    parts.push("<style>body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;color:#1a1a1a;max-width:820px;margin:24px auto;padding:0 20px;line-height:1.7}h1{font-size:22px;border-bottom:2px solid #c8ff3d;padding-bottom:8px}h2{font-size:16px;margin-top:26px;border-left:4px solid #c8ff3d;padding-left:8px}p{margin:6px 0}li{margin:3px 0}pre{background:#f6f7f5;padding:8px 10px;border-radius:6px;overflow-x:auto;font-size:12.5px}table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}img{max-width:100%;height:auto;border-radius:6px}</style></head><body>");
     parts.push("<h1>" + escHtml(project.name) + "</h1>");
     project.sections.forEach(function (s) {
       parts.push("<h2>" + escHtml(s.title) + "</h2>");

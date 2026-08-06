@@ -68,8 +68,36 @@
       html += "</tr>";
     }
     html += "</tbody></table><p><br></p>";
-    area.focus();
-    document.execCommand("insertHTML", false, html);
+    insertHtmlAtCaret(area, html);
+  }
+
+  function isSelIn(area) {
+    var sel = window.getSelection();
+    return !!(sel && sel.rangeCount && area.contains(sel.getRangeAt(0).commonAncestorContainer));
+  }
+
+  function insertHtmlAtCaret(area, html) {
+    var sel = window.getSelection();
+    var range;
+    if (isSelIn(area)) {
+      range = sel.getRangeAt(0);
+      range.deleteContents();
+    } else {
+      area.focus();
+      range = document.createRange();
+      range.selectNodeContents(area);
+      range.collapse(false);
+    }
+    var frag = range.createContextualFragment(html);
+    var last = frag.lastChild;
+    range.insertNode(frag);
+    if (last) {
+      range.setStartAfter(last);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    area.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function pickImageFor(area) {
@@ -85,8 +113,7 @@
       }
       var reader = new FileReader();
       reader.onload = function () {
-        area.focus();
-        document.execCommand("insertHTML", false, '<img src="' + reader.result + '" alt="图片" style="max-width:100%;border-radius:6px">');
+        insertHtmlAtCaret(area, '<img src="' + reader.result + '" alt="图片" style="max-width:100%;border-radius:6px">');
       };
       reader.readAsDataURL(file);
       input.value = "";
@@ -575,8 +602,12 @@
         bar.querySelectorAll("[data-cmd]").forEach(function (btn) {
           if (btn.tagName === "SELECT") {
             btn.addEventListener("change", function () {
-              area.focus();
-              document.execCommand("fontSize", false, btn.value);
+              var sel = window.getSelection();
+              if (sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+                document.execCommand("fontSize", false, btn.value);
+              } else {
+                window.alert("请先选中要调整字号的文字");
+              }
             });
             return;
           }
@@ -594,8 +625,12 @@
         var color = bar.querySelector(".rte-color");
         if (color) {
           color.addEventListener("input", function () {
-            area.focus();
-            document.execCommand("foreColor", false, color.value);
+            var sel = window.getSelection();
+            if (sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+              document.execCommand("foreColor", false, color.value);
+            } else {
+              window.alert("请先选中要设置颜色的文字");
+            }
           });
         }
       });
