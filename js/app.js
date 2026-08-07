@@ -94,14 +94,63 @@
         input.value = "";
         return;
       }
-      var reader = new FileReader();
-      reader.onload = function () {
-        insertHtmlAtCaret(area, '<img src="' + reader.result + '" alt="图片" style="max-width:100%;border-radius:6px">');
-      };
-      reader.readAsDataURL(file);
+      // 插入前自动压缩（转 JPEG，兼容 Word/PDF 导出；画质优先）
+      compressImageFile(file, 1280, 0.82, function (out) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          insertHtmlAtCaret(area, '<img src="' + reader.result + '" alt="图片" loading="lazy" decoding="async" style="max-width:100%;border-radius:6px">');
+        };
+        reader.readAsDataURL(out);
+      }, true);
       input.value = "";
     };
     input.click();
+  }
+
+  // 图片压缩：等比缩到 maxDim 内，优先 WebP（附件）或 JPEG（富文本/导出兼容），
+  // 压缩后不小于原图则保留原图（透明 PNG 走 WebP/PNG，不填白底）。
+  function compressImageFile(file, maxDim, quality, done, preferJpeg) {
+    if (!file || (file.type || "").indexOf("image/") !== 0) { done(file); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (!w || !h) { done(file); return; }
+        var scale = Math.min(1, maxDim / Math.max(w, h));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        var ctx = canvas.getContext("2d");
+        var isPng = file.type === "image/png" && !preferJpeg;
+        if (!isPng) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        var encoders = preferJpeg ? ["image/jpeg"] : (isPng ? ["image/webp", "image/png"] : ["image/webp", "image/jpeg"]);
+        var i = 0;
+        var attempt = function () {
+          if (i >= encoders.length || typeof canvas.toBlob !== "function") { done(file); return; }
+          var mime = encoders[i++];
+          try {
+            canvas.toBlob(function (blob) {
+              if (blob && blob.size > 0 && blob.size < file.size) done(blob);
+              else attempt();
+            }, mime, quality);
+          } catch (e) { attempt(); }
+        };
+        attempt();
+      };
+      img.onerror = function () { done(file); };
+      img.src = reader.result;
+    };
+    reader.onerror = function () { done(file); };
+    reader.readAsDataURL(file);
+  }
+
+  function lazyImg(html) {
+    return String(html || "").replace(/<img\s/g, '<img loading="lazy" decoding="async" ');
   }
 
   var App = {
@@ -117,6 +166,7 @@
       this.route();
       this.wireExit();
       this.showSplash();
+      this.migrateImages();
       // 点击编辑页导出菜单外部时收起菜单
       document.addEventListener("click", function (e) {
         var menu = document.getElementById("fb-export");
@@ -728,9 +778,14 @@
           errs.push(file.name + " 超过 10MB");
           return null;
         }
-        var id = Store.uid();
-        return Store.attachSave(id, file).then(function () {
-          p.attachments.push({ id: id, name: file.name, size: file.size, type: file.type || "" });
+        // 图片附件自动压缩后再存入 IndexedDB，保证列表与下载都轻量
+        return new Promise(function (res) {
+          compressImageFile(file, 1920, 0.85, function (out) { res(out); });
+        }).then(function (blob) {
+          var id = Store.uid();
+          return Store.attachSave(id, blob).then(function () {
+            p.attachments.push({ id: id, name: file.name, size: blob.size, type: blob.type || file.type || "" });
+          });
         });
       }).filter(Boolean);
       Promise.all(tasks).then(function () {
@@ -738,6 +793,71 @@
         if (errs.length) window.alert("以下文件未添加：" + errs.join("；"));
         self.renderStep2(p.id);
       }).catch(function () { window.alert("附件保存失败"); });
+    },
+
+    // 存量图片压缩迁移：附件图片 >400KB、富文本内嵌大图，后台逐步压缩替换
+    migrateImages: function () {
+      var self = this;
+      Store.getUserProjects().forEach(function (p) {
+        self.migrateAttachments(p);
+        self.migrateRichImages(p);
+      });
+    },
+
+    migrateAttachments: function (p) {
+      var self = this;
+      (p.attachments || []).forEach(function (a) {
+        if ((a.type || "").indexOf("image/") !== 0 || a.size <= 400 * 1024) return;
+        Store.attachGet(a.id).then(function (blob) {
+          if (!blob || (blob.type || "").indexOf("image/") !== 0 || blob.size <= 400 * 1024) return;
+          compressImageFile(blob, 1920, 0.85, function (out) {
+            if (out === blob) return;
+            Store.attachSave(a.id, out).then(function () {
+              a.size = out.size;
+              a.type = out.type || a.type;
+              Store.upsertProject(p);
+            }).catch(function () {});
+          });
+        }).catch(function () {});
+      });
+    },
+
+    migrateRichImages: function (p) {
+      var queue = [];
+      p.sections.forEach(function (sec) {
+        var html = sec.content || "";
+        var re = /<img[^>]+src="(data:image\/[^";]+);base64,([^"]+)"/g;
+        var m;
+        while ((m = re.exec(html))) {
+          if (m[2].length > 300 * 1024) queue.push({ sec: sec, match: m[0], mime: m[1].replace(/^data:/, ""), b64: m[2] });
+        }
+      });
+      var run = function (i) {
+        if (i >= queue.length) return;
+        var item = queue[i];
+        var blob = null;
+        try {
+          var bin = atob(item.b64);
+          var bytes = new Uint8Array(bin.length);
+          for (var k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+          blob = new Blob([bytes], { type: item.mime });
+        } catch (e) { run(i + 1); return; }
+        compressImageFile(blob, 1280, 0.82, function (out) {
+          if (out !== blob) {
+            var fr = new FileReader();
+            fr.onload = function () {
+              item.sec.content = (item.sec.content || "").replace(item.match, '<img src="' + fr.result + '" loading="lazy" decoding="async" style="max-width:100%;border-radius:6px">');
+              Store.upsertProject(p);
+              run(i + 1);
+            };
+            fr.onerror = function () { run(i + 1); };
+            fr.readAsDataURL(out);
+          } else {
+            run(i + 1);
+          }
+        }, true);
+      };
+      run(0);
     },
 
     removeAttachment: function (p, att) {
@@ -791,7 +911,7 @@
       html += '<div class="card preview-content" style="margin-top:14px">';
       p.sections.forEach(function (sec) {
         html += "<h2>" + esc(sec.title) + "</h2>";
-        html += Export.renderContent(sec.content);
+        html += lazyImg(Export.renderContent(sec.content));
       });
       html += "</div>";
       if ((p.attachments || []).length) {
@@ -865,7 +985,7 @@
       html += '<div class="card preview-content" style="margin-top:14px">';
       p.sections.forEach(function (sec) {
         html += "<h2>" + esc(sec.title) + "</h2>";
-        html += Export.renderContent(sec.content);
+        html += lazyImg(Export.renderContent(sec.content));
       });
       html += "</div>";
       if ((p.attachments || []).length) {
