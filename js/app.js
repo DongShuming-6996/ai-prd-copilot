@@ -1735,7 +1735,7 @@
           var q = p.questions.find(function (x) { return x.id === qid; });
           if (!q) return;
           var action = btn.getAttribute("data-q-action");
-          if (action === "use-suggest") { q.answer = q.suggestedAnswer; self.renderQuestionsPage(p.id); return; }
+          if (action === "use-suggest") { q.answer = q.suggestedAnswer; Store.upsertProject(p); self.renderQuestionsPage(p.id); return; }
           if (action === "confirm") { q.status = "confirmed"; q.answer = q.answer || q.suggestedAnswer; }
           else if (action === "skip") { q.status = "skipped"; }
           else { q.status = "pending"; }
@@ -1825,16 +1825,6 @@
         location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
         return;
       }
-
-      // 如果和上次进入编辑时没有新增/变更确认答案，跳过 AI
-      var lastHash = p._lastConfirmHash || "";
-      var currentHash = confirmed.map(function (q) { return q.id + ":" + q.answer; }).sort().join("|");
-      if (currentHash === lastHash && p._lastConfirmHash !== undefined) {
-        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
-        return;
-      }
-      p._lastConfirmHash = currentHash;
-      Store.upsertProject(p);
 
       var mask = self.showGenModal("正在结合追问答案重新生成内容...", function () {
         // 取消生成，直接进入编辑（基础合并已完成）
