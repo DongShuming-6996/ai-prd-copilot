@@ -13,5 +13,5 @@ window.AI_DIRECT_MODEL = "deepseek-chat";
 // 每个访客（浏览器）的试用次数限制
 window.AI_USAGE_LIMIT = 5;         // 最多生成次数
 window.AI_USAGE_WINDOW = "total";  // "total"=累计限制 / "day"=每天重置
-window.AI_USAGE_VERSION = 3;       // 递增强制重置计数
+window.AI_USAGE_VERSION = 4;
 window.AI_USAGE_WINDOW = "total";  // "total"=累计限制 / "day"=每天重置
