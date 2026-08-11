@@ -169,10 +169,17 @@
 
     // ---------- 浏览器端 AI 用量计数 ----------
     getUsage: function () {
-      return read("usage", { count: 0 });
+      var u = read("usage", { count: 0, version: 0 });
+      // 版本号变了自动重置计数
+      var cfgVer = (typeof window !== "undefined" && window.AI_USAGE_VERSION) ? window.AI_USAGE_VERSION : 1;
+      if (u.version !== cfgVer) { u = { count: 0, version: cfgVer }; this.setUsage(u); }
+      return u;
     },
     setUsage: function (usage) {
-      write("usage", usage || { count: 0 });
+      var cfgVer = (typeof window !== "undefined" && window.AI_USAGE_VERSION) ? window.AI_USAGE_VERSION : 1;
+      usage = usage || { count: 0, version: cfgVer };
+      usage.version = cfgVer;
+      write("usage", usage);
     },
     incrementUsage: function () {
       var u = this.getUsage();
