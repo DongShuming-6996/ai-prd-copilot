@@ -1303,13 +1303,22 @@ th { background: rgba(255, 255, 255, 0.06); font-weight: 600; }
   padding-top: 8px;
 }
 
-/* 固定底部操作栏（编辑页/预览页） */
+/* 固定底部操作栏（全局） */
+.fixed-bar {
+  position: fixed !important;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  z-index: 99999;
+}
 body.has-fixed .fixed-bar {
-  position: fixed;
+  position: fixed !important;
   bottom: 0;
 }
 body.has-fixed {
-  padding-bottom: 60px;
+  padding-bottom: 80px;
 }
 
 /* ---------- 系统模拟材料网格 ---------- */

@@ -225,15 +225,16 @@
     // ---------- 新手引导 Tour ----------
 
     maybeStartTour: function () {
-      // sessionStorage：每次打开浏览器会话展示一次引导
       try {
         if (sessionStorage.getItem("prd_studio_tour_done")) return;
       } catch (e) {}
-      // 等 DOM 渲染完成后再启动（requestAnimationFrame 保证无缝）
       var self = this;
+      // 等 DOM 完全渲染后再启动（多重保障）
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
-          self.startTour();
+          setTimeout(function () {
+            self.startTour();
+          }, 200);
         });
       });
     },
