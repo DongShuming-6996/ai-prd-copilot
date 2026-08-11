@@ -63,7 +63,11 @@
     } catch (e) {
       // 服务端不可用 → 尝试直连 DeepSeek
       var directKey = (typeof window !== "undefined" && window.AI_DIRECT_KEY) || "";
-      if (directKey) {
+      // 自动解码 base64 格式的 Key
+      if (directKey && !directKey.startsWith("sk-")) {
+        try { directKey = atob(directKey); } catch(e) {}
+      }
+      if (directKey && directKey.startsWith("sk-")) {
         try {
           return await callDirectAPI(action, payload, directKey);
         } catch (e2) {

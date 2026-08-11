@@ -6,7 +6,7 @@
 // Vercel 代理地址（优先走服务端，Key 在 Vercel 环境变量中，安全）
 window.AI_API_BASE = "https://ai-prd-copilot-plum.vercel.app";
 // 备用直连 Key（仅本地调试用，留空则走 Demo）
-window.AI_DIRECT_KEY = "";
+window.AI_DIRECT_KEY = "c2stMTViOWRhNWQ2NTg0NDhiYWJhYmI4YTZiMDZiYTRjMTc=";
 window.AI_DIRECT_BASE = "https://api.deepseek.com";
 window.AI_DIRECT_MODEL = "deepseek-chat";
 
