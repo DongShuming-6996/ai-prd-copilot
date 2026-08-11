@@ -35,9 +35,10 @@
     var h = location.hash || "#/";
     var m;
     if ((m = h.match(/^#\/new(?:\?id=([^/]*))?$/))) return { page: "new", id: m[1] ? decodeURIComponent(m[1]) : null };
-    if ((m = h.match(/^#\/edit\/([^/]+)$/))) return { page: "edit", id: decodeURIComponent(m[1]) };
+    if ((m = h.match(/^#\/edit\/([^?/]+)(\?mode=editor)?$/))) return { page: "edit", id: decodeURIComponent(m[1]), mode: m[2] ? "editor" : "material" };
     if ((m = h.match(/^#\/preview\/([^/]+)$/))) return { page: "preview", id: decodeURIComponent(m[1]) };
     if ((m = h.match(/^#\/project\/([^/]+)$/))) return { page: "project", id: decodeURIComponent(m[1]) };
+    if ((m = h.match(/^#\/questions\/([^/]+)$/))) return { page: "questions", id: decodeURIComponent(m[1]) };
     return { page: "list" };
   }
 
@@ -153,6 +154,16 @@
     return String(html || "").replace(/<img\s/g, '<img loading="lazy" decoding="async" ');
   }
 
+  function getFilesFromClipboard(e) {
+    var files = [];
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return files;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") files.push(items[i].getAsFile());
+    }
+    return files;
+  }
+
   var App = {
     state: {
       form: { id: null, name: "", businessLine: [], dept: [], priority: "", tags: [], selectedSections: [], newSecTitle: "", newSecDesc: "" },
@@ -167,6 +178,7 @@
       this.wireExit();
       this.showSplash();
       this.migrateImages();
+      this.updateModeBadge();
       // 点击编辑页导出菜单外部时收起菜单
       document.addEventListener("click", function (e) {
         var menu = document.getElementById("fb-export");
@@ -196,13 +208,245 @@
       var mask = document.createElement("div");
       mask.className = "modal-mask";
       mask.innerHTML =
-        '<div class="modal"><h3>欢迎使用 PRD Studio</h3>' +
-        '<p style="margin:10px 0;color:#cfd6e2;line-height:1.9">为了方便您的预览体验，您不需要完成登录或注册，系统中已有模拟的 50 条 PRD，方便您可以直接尝试筛选查找 PRD 或者写新的 PRD。</p>' +
-        '<div class="row" style="justify-content:flex-end;margin-top:16px;margin-bottom:0"><button class="btn primary" id="splash-ok">确认</button></div></div>';
+        '<div class="modal"><h3>欢迎使用 AI PRD Studio</h3>' +
+        '<p style="margin:10px 0;color:#cfd6e2;line-height:1.9">AI 驱动的 PRD 撰写与管理工具。粘贴需求材料 → AI 生成初稿 → 两阶段追问澄清 → 富文本兜底完善 → 导出。系统已内置 50 条模拟 PRD 供预览。</p>' +
+        '<div class="row" style="justify-content:flex-end;margin-top:16px;margin-bottom:0"><button class="btn primary" id="splash-ok">开始使用</button></div></div>';
       document.body.appendChild(mask);
+      var self = this;
       document.getElementById("splash-ok").addEventListener("click", function () {
         document.body.removeChild(mask);
+        // 无缝衔接：关掉欢迎弹窗后立即启动新手引导
+        if (parseHash().page === "list") {
+          self.maybeStartTour();
+        }
       });
+    },
+
+    // ---------- 新手引导 Tour ----------
+
+    maybeStartTour: function () {
+      // sessionStorage：每次打开浏览器会话展示一次引导
+      try {
+        if (sessionStorage.getItem("prd_studio_tour_done")) return;
+      } catch (e) {}
+      // 等 DOM 渲染完成后再启动（requestAnimationFrame 保证无缝）
+      var self = this;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          self.startTour();
+        });
+      });
+    },
+
+    startTour: function () {
+      var self = this;
+      this._tourStep = 0;
+      this._tourSteps = [
+        {
+          title: "① 新建 PRD",
+          text: "点击这里开始创建你的第一个 PRD。你可以粘贴需求材料，AI 会帮你生成初稿并追问澄清。",
+          selector: function () { return document.querySelector('a[href="#/new"].btn.primary') || document.getElementById("nav-new"); },
+          arrow: "bottom",
+        },
+        {
+          title: "② 筛选查找",
+          text: "系统内置了 50 条模拟 PRD。你可以按业务线、部门、优先级、标签、关键词等维度快速筛选。",
+          selector: function () { return document.querySelector(".filter-bar") || document.getElementById("f-keyword"); },
+          arrow: "top",
+        },
+        {
+          title: "③ 查看详情",
+          text: "点击任意 PRD 名称进入详情页，查看完整内容、附件，或导出 Word / PDF / Markdown。",
+          selector: function () { return document.querySelector(".project-card .name") || document.querySelector(".project-card a"); },
+          arrow: "top",
+        },
+        {
+          title: "🎉 开始体验吧",
+          text: "你已经了解了三个核心入口。现在可以自由探索——试试筛选、新建或查看一条模拟 PRD 吧！",
+          selector: function () { return null; },
+          arrow: "top",
+        },
+      ];
+      this.renderTourStep();
+    },
+
+    renderTourStep: function () {
+      var step = this._tourStep;
+      var data = this._tourSteps[step];
+      if (!data) { this.endTour(); return; }
+      var self = this;
+
+      // 清理旧 DOM
+      this.endTour(true);
+
+      var target = data.selector ? data.selector() : null;
+
+      // 创建遮罩
+      var overlay = document.createElement("div");
+      overlay.className = "tour-overlay";
+      overlay.id = "tour-overlay";
+      document.body.appendChild(overlay);
+
+      // 高亮目标
+      if (target) {
+        var rect = target.getBoundingClientRect();
+        var spot = document.createElement("div");
+        spot.className = "tour-spotlight";
+        spot.id = "tour-spotlight";
+        spot.style.left = (rect.left - 6) + "px";
+        spot.style.top = (rect.top - 6) + "px";
+        spot.style.width = (rect.width + 12) + "px";
+        spot.style.height = (rect.height + 12) + "px";
+        document.body.appendChild(spot);
+        // 让目标元素透过遮罩可点击（但引导不强制）
+        target.style.position = "relative";
+        target.style.zIndex = "10001";
+      }
+
+      // 创建提示气泡
+      var tip = document.createElement("div");
+      tip.className = "tour-tip";
+      tip.id = "tour-tip";
+
+      // 进度点
+      var dots = "";
+      for (var i = 0; i < this._tourSteps.length; i++) {
+        dots += '<span class="step-dot' + (i === step ? " active" : "") + '"></span>';
+      }
+
+      tip.innerHTML =
+        '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + esc(data.title) + "</div>" +
+        '<div style="color:#cfd6e2">' + data.text + "</div>" +
+        '<div class="tour-progress">' + dots + " " + (step + 1) + " / " + this._tourSteps.length + "</div>" +
+        '<div class="btn-row">' +
+        (step < this._tourSteps.length - 1
+          ? '<button class="btn sm primary" id="tour-next">我知道了</button>'
+          : '<button class="btn sm primary" id="tour-finish">开始体验</button>') +
+        "</div>";
+
+      document.body.appendChild(tip);
+
+      // 定位气泡
+      var tipH = tip.offsetHeight;
+      var tipW = tip.offsetWidth;
+      if (target) {
+        var r = target.getBoundingClientRect();
+        var left = Math.max(10, Math.min(r.left + r.width / 2 - tipW / 2, window.innerWidth - tipW - 10));
+        var top;
+        if (data.arrow === "bottom") {
+          top = r.bottom + 14;
+          tip.className += " arrow-bottom";
+        } else if (data.arrow === "top") {
+          top = r.top - tipH - 14;
+          tip.className += " arrow-top";
+        } else {
+          top = r.top + r.height / 2 - tipH / 2;
+        }
+        top = Math.max(10, Math.min(top, window.innerHeight - tipH - 10));
+        tip.style.left = left + "px";
+        tip.style.top = top + "px";
+      } else {
+        // 最后一步居中
+        tip.style.left = Math.max(10, (window.innerWidth - tipW) / 2) + "px";
+        tip.style.top = Math.max(40, (window.innerHeight - tipH) / 2) + "px";
+      }
+
+      // 事件绑定
+      var nextBtn = document.getElementById("tour-next");
+      var finishBtn = document.getElementById("tour-finish");
+      if (nextBtn) {
+        nextBtn.addEventListener("click", function () {
+          // 恢复目标 z-index
+          if (target) { target.style.position = ""; target.style.zIndex = ""; }
+          self._tourStep++;
+          self.renderTourStep();
+        });
+      }
+      if (finishBtn) {
+        finishBtn.addEventListener("click", function () {
+          if (target) { target.style.position = ""; target.style.zIndex = ""; }
+          self.endTour();
+        });
+      }
+
+      // 点击遮罩也可关闭（最后一步）
+      if (step === self._tourSteps.length - 1) {
+        overlay.addEventListener("click", function () {
+          self.endTour();
+        });
+      }
+    },
+
+    endTour: function (silent) {
+      silent = silent || false;
+      var spot = document.getElementById("tour-spotlight");
+      var tip = document.getElementById("tour-tip");
+      var overlay = document.getElementById("tour-overlay");
+      if (spot) document.body.removeChild(spot);
+      if (tip) document.body.removeChild(tip);
+      if (overlay) document.body.removeChild(overlay);
+      if (!silent) {
+        try { sessionStorage.setItem("prd_studio_tour_done", "1"); } catch (e) {}
+        // 新手引导结束后，展示创建 PRD 邀请提示
+        this.showCreateInvite();
+      }
+    },
+
+    showCreateInvite: function () {
+      var self = this;
+      // 检查是否在列表页
+      if (parseHash().page !== "list") return;
+      // 延迟一点等 tour overlay 完全消失
+      setTimeout(function () {
+        var existing = document.getElementById("create-invite");
+        if (existing) existing.parentElement.removeChild(existing);
+        var banner = document.createElement("div");
+        banner.id = "create-invite";
+        banner.className = "invite-banner";
+        banner.innerHTML =
+          '<span class="invite-text">👋 准备开始了吗？</span>' +
+          '<a href="#/new" class="btn primary sm">创建你的第一个 PRD →</a>' +
+          '<span class="invite-hint">点击任意处关闭</span>';
+        var app = document.getElementById("app");
+        if (app && app.firstChild) {
+          app.insertBefore(banner, app.firstChild);
+        } else if (app) {
+          app.appendChild(banner);
+        }
+        // 点击任意处关闭
+        var dismiss = function (e) {
+          if (banner && banner.parentElement) {
+            banner.style.opacity = "0";
+            banner.style.transform = "translateY(-8px)";
+            setTimeout(function () {
+              if (banner.parentElement) banner.parentElement.removeChild(banner);
+            }, 250);
+          }
+          document.removeEventListener("click", dismiss);
+        };
+        // 延迟绑定避免立即触发
+        setTimeout(function () {
+          document.addEventListener("click", dismiss);
+        }, 100);
+      }, 300);
+    },
+
+    updateModeBadge: function () {
+      var badge = document.getElementById("mode-badge");
+      if (!badge) return;
+      var self = this;
+      if (typeof AI !== "undefined" && AI.checkServerKey) {
+        AI.checkServerKey().then(function (has) {
+          badge.textContent = has ? "DeepSeek 模式" : "Demo 模式";
+          badge.className = "demo-badge" + (has ? " live" : "");
+        }).catch(function () {
+          badge.textContent = "Demo 模式";
+          badge.className = "demo-badge";
+        });
+      } else {
+        badge.textContent = "Demo 模式";
+        badge.className = "demo-badge";
+      }
     },
 
     route: function () {
@@ -212,7 +456,8 @@
         this.state.form._key = ""; // 离开新建页后清空表单标记，下次进入重新初始化
       }
       if (r.page === "new") this.renderStep1(r.id);
-      else if (r.page === "edit") this.renderStep2(r.id);
+      else if (r.page === "edit") this.renderStep2(r.id, r.mode);
+      else if (r.page === "questions") this.renderQuestionsPage(r.id);
       else if (r.page === "preview") this.renderStep3(r.id);
       else if (r.page === "project") this.renderDetail(r.id);
       else this.renderList();
@@ -343,7 +588,7 @@
       var self = this;
       var body = document.getElementById("list-body");
       if (!body) return;
-      var list = this.state.projects.filter(function (p) { return self.matches(p); });
+      var list = this.state.projects.filter(function (p) { return self.matches(p); }).sort(function (a, b) { return b.updatedAt - a.updatedAt; });
       var countEl = document.getElementById("f-count");
       if (countEl) countEl.textContent = "共 " + list.length + " 个 PRD";
       if (!list.length) {
@@ -368,7 +613,7 @@
         html += '<span class="tag ' + (p.status === "done" ? "ok" : p.status === "editing" ? "blue" : "") + '">' + (STATUS_TEXT[p.status] || "草稿") + "</span>";
         html += '<a href="#/project/' + encodeURIComponent(p.id) + '" class="btn sm">详情</a>';
         if (!p.simulated) {
-          html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
+          html += '<a href="#/edit/' + encodeURIComponent(p.id) + '?mode=editor" class="btn sm">编辑</a>';
           html += '<button class="btn sm danger" data-del="' + p.id + '">删除</button>';
         }
         html += "</div>";
@@ -546,11 +791,12 @@
       });
 
       this.setFixedBar(
-        '<a href="#/" class="btn">取消</a>' +
+        '<button class="btn" id="fb-cancel" style="flex:1;padding:10px 14px;font-size:13px">取消</button>' +
         '<span class="spacer"></span>' +
-        '<span class="muted" style="font-size:12px">下一步将进入逐节填写</span>' +
-        '<button class="btn primary" id="fb-step1-next">下一步 →</button>'
+        '<span class="muted" style="font-size:12px">下一步将进入材料输入</span>' +
+        '<button class="btn primary" id="fb-step1-next" style="flex:1;padding:10px 14px;font-size:13px">下一步</button>'
       );
+      document.getElementById("fb-cancel").addEventListener("click", function () { location.hash = "#/"; });
       document.getElementById("fb-step1-next").addEventListener("click", function () { self.saveStep1(); });
     },
 
@@ -596,9 +842,9 @@
       location.hash = "#/edit/" + encodeURIComponent(project.id);
     },
 
-    // ---------- 3. 创建向导 Step 2：逐节填写 + 附件 ----------
+    // ---------- 3. 创建向导 Step 2：AI 生成 + 逐节填写 + 附件 ----------
 
-    renderStep2: function (id) {
+    renderStep2: function (id, mode) {
       var self = this;
       var p = Store.getProject(id);
       if (!p) {
@@ -606,22 +852,1152 @@
         document.getElementById("app").innerHTML = '<div class="card">项目不存在。<a href="#/" class="btn sm" style="margin-left:10px">返回列表</a></div>';
         return;
       }
-      if (p.simulated) {
-        this.renderDetail(id);
+      if (p.simulated) { this.renderDetail(id); return; }
+      this.state.project = p;
+
+      // mode=editor → 直接显示富文本编辑器
+      if (mode === "editor") {
+        this.renderStep2EditorPage(p);
         return;
       }
-      this.state.project = p;
-      var filled = this.filled(p);
 
+      this.state.project = p;
+
+      // 顶部项目信息
       var html = '<div class="row" style="justify-content:space-between">';
       html += '<div style="min-width:0;flex:1"><input class="name-input" id="e-name" value="' + esc(p.name) + '">';
       html += '<div id="e-meta" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap"></div></div>';
-      html += '<div class="muted" style="font-size:12.5px">第 2 步 / 共 3 步 · 逐节填写</div></div>';
-      html += '<div class="cols" style="margin-top:16px"><div class="col tight"><div class="sidenav"><div class="title">章节导航</div>';
+      html += '<div class="muted" style="font-size:12.5px">第 2 步 / 共 3 步</div></div>';
+
+      html += this.renderStep2AI(p);
+
+      document.getElementById("app").innerHTML = html;
+
+      // 绑定项目名称
+      document.getElementById("e-name").addEventListener("input", function (e) { p.name = e.target.value || "未命名项目"; Store.upsertProject(p); });
+
+      // 材料输入页不显示底部导航栏
+      this.clearFixedBar();
+
+      // 绑定 AI 材料输入事件
+      this.wireStep2AI(p);
+    },
+
+    // ---- Step 2a: AI 生成 & 追问面板 ----
+
+    renderStep2AI: function (p) {
+      var self = this;
+      var hasGenerated = p.questions && p.questions.length > 0;
+
+      var html = "";
+      // 材料输入区
+      html += '<div class="card"><div class="material-main-title">材料输入</div>';
+
+      // ① 系统模拟文件勾选区（最上方）
+      html += '<div class="material-section" style="width:100%"><div class="material-section-title">勾选系统模拟文件</div>';
+      html += '<div style="text-align:center;color:var(--warn);font-size:12px;margin-bottom:8px">为保障您的数据隐私安全，您可以不上传自己的文件，勾选下方 2-4 份系统模拟文件即可体验 PRD 生成</div>';
+      html += '<div class="sample-grid" id="ai-sample-grid">';
+      if (typeof SampleMaterials !== "undefined") {
+        var samples = SampleMaterials.getList();
+        var selectedSamples = this.state._selectedSamples || [];
+        samples.forEach(function (sm) {
+          var checked = selectedSamples.indexOf(sm.id) >= 0;
+          html += '<label class="sample-check' + (checked ? " checked" : "") + '"><input type="checkbox" data-sm-id="' + sm.id + '"' + (checked ? " checked" : "") + ">";
+          html += '<div><span class="sample-label">' + esc(sm.label) + '</span>';
+          html += '<span class="sample-desc">' + esc(sm.desc) + "</span></div></label>";
+        });
+      }
+      html += "</div>";
+      html += '<div class="row" style="margin-top:8px;gap:8px;justify-content:center">';
+      html += '<button class="btn sm primary" id="ai-sample-confirm">确认提交（' + (selectedSamples.length) + ' 份）</button>';
+      html += '<button class="btn sm" id="ai-sample-clear">清空选择</button>';
+      html += "</div></div>";
+
+      // ②③ 文件拖拽 + 文本粘贴 并排
+      html += '<div class="material-row">';
+
+      html += '<div class="material-section material-half"><div class="material-section-title">上传或拖拽文件</div>';
+      html += '<div class="drop-zone" id="ai-drop-zone" style="min-height:160px;display:flex;align-items:center;justify-content:center">';
+      html += '<div class="drop-zone-inner">';
+      html += '<div style="font-size:13px;color:#cfd6e2">拖拽文件到此处</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">或点击选择文件</div>';
+      html += '<div style="font-size:10px;color:var(--muted);margin-top:6px">支持 Word · PDF · PPT · TXT · MD</div>';
+      html += '<div style="font-size:10px;color:var(--muted);margin-top:4px">Ctrl+V 粘贴文件</div>';
+      html += "</div></div>";
+      html += '<input type="file" id="ai-file-input" accept=".txt,.md,.markdown,.pptx,.docx,.pdf,.doc" style="display:none">';
+      html += "</div>";
+
+      html += '<div class="material-section material-half"><div class="material-section-title">粘贴文本内容</div>';
+      html += '<textarea id="ai-paste-text" placeholder="在此粘贴需求文档、会议纪要、PRD 草稿……&#10;点击下方按钮添加到材料清单" style="min-height:160px;width:100%;resize:vertical">' + esc((this.state.aiPasteText || "")) + "</textarea>";
+      html += '<div style="margin-top:8px"><button class="btn sm primary" id="ai-add-paste">添加为材料</button></div>';
+      html += "</div>";
+
+      html += "</div>"; // end material-row
+
+      // 材料清单
+      html += '<div id="ai-materials" style="margin-top:10px;clear:both">';
+      if ((p.materials || []).length) {
+        html += '<div class="edit-title" style="font-size:13px">📋 材料清单（' + p.materials.length + '） <span class="tag ok">可溯源</span></div>';
+        p.materials.forEach(function (m, i) {
+          var typeLabel = m.type || "text";
+          html += '<div class="attach-item"><span class="tag blue">' + esc(typeLabel) + "</span>";
+          html += '<span class="grow">' + esc(m.label) + "</span>";
+          html += '<span class="muted" style="font-size:11px;margin-right:8px">' + (m.text ? m.text.length : 0) + " 字</span>";
+          html += '<button class="btn sm" data-edit-mat="' + i + '" title="修改内容">✏️</button>';
+          html += '<button class="btn sm danger" data-rm-mat="' + i + '">删除</button></div>';
+        });
+      } else {
+        html += '<div class="muted" style="font-size:13px;padding:8px 0">还没有材料，先勾选系统模拟文件、上传文件或粘贴文本</div>';
+      }
+      html += "</div>";
+
+      // 生成设置
+      html += '<div class="row" style="margin-top:12px;gap:12px;flex-wrap:wrap;align-items:center">';
+      html += '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#8b94a6"><input type="checkbox" id="ai-crossdept"' + (p.crossDept !== false ? " checked" : "") + ">跨部门协作</label>";
+      html += "</div>";
+
+      // 操作按钮行：放弃 + AI生成
+      html += '<div class="row" style="margin-top:14px;align-items:center;gap:12px">';
+      html += '<a href="#/" class="btn" style="flex:1;padding:10px 16px;font-size:13px;background:rgba(255,92,122,0.12);border:1px solid rgba(255,92,122,0.35);color:#ff5c7a;text-align:center;border-radius:8px">放弃生成，返回首页</a>';
+      html += '<button class="btn primary" id="ai-generate" style="flex:2;padding:10px 16px;font-size:13px"' + (this.state.aiGenerating ? " disabled" : "") + ">";
+      html += this.state.aiGenerating ? '<span class="spinner"></span> 正在生成初稿与追问…' : "AI 生成 PRD 初稿";
+      html += "</button>";
+      html += "</div>";
+      html += '<div class="muted" style="font-size:11px;margin-top:4px;text-align:right">消耗 1 次 AI 额度（Demo 模式不消耗）</div>';
+
+      if (this.state.aiError) {
+        html += '<div class="banner warn" style="margin-top:10px">' + esc(this.state.aiError) + "</div>";
+      }
+      html += "</div>";
+
+      // 追问面板（生成后显示）
+      if (hasGenerated) {
+        html += this.renderQuestionsHTML(p);
+      }
+
+      return html;
+    },
+
+    renderQuestionsHTML: function (p) {
+      var self = this;
+      var total = p.questions.length;
+      var confirmed = p.questions.filter(function (q) { return q.status === "confirmed"; }).length;
+      var pct = total ? Math.round((confirmed / total) * 100) : 0;
+      var counts = {
+        all: total,
+        s1: p.questions.filter(function (q) { return q.stage === 1 && !q.dataLayer; }).length,
+        s2: p.questions.filter(function (q) { return q.stage === 2 && !q.dataLayer; }).length,
+        data: p.questions.filter(function (q) { return q.dataLayer; }).length,
+      };
+      var secCount = (function (sections) {
+        var set = {};
+        (sections || []).forEach(function (s) {
+          var m = String(s.title || "").match(/^\s*(\d+)/);
+          if (m) set[m[1]] = true;
+        });
+        return Object.keys(set).length || (sections ? sections.length : 0);
+      })(p.sections);
+
+      var html = '<div class="q-page">';
+
+      // 固定顶部栏：进度 + 批量操作 + 筛选tabs
+      html += '<div class="q-fixed-top">';
+      html += '<div class="banner" style="margin-bottom:6px">生成完成，AI 提出 <b>' + total + " 条追问</b>" + (p.usedDemo ? "（Demo 模式）" : "") + "</div>";
+
+      // 第一行：进度 + 次要操作靠右
+      html += '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
+      html += '<div class="progress-track" style="flex:0 1 80px"><i style="width:' + pct + '%"></i></div>';
+      html += '<span style="font-size:12px;color:var(--muted)">已确认 ' + confirmed + " / " + total + "</span>";
+      html += '<span class="spacer"></span>';
+      html += '<button class="btn sm" id="q-skip-all">一键跳过全部</button>';
+      html += '<button class="btn sm" id="q-enhance"' + (self.state.aiEnhancing ? " disabled" : "") + ">加强追问</button>";
+      html += "</div>";
+      // 第二行：一键全部使用建议答案（独占一行，显眼）
+      html += '<div class="row" style="margin-bottom:8px">';
+      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600">一键全部使用建议答案</button>';
+      html += "</div>";
+      html += '<div class="muted" style="font-size:11px;text-align:center;margin-bottom:6px">所有待确认追问将自动填入建议答案并确认，可在下方逐条修改</div>';
+
+      // 追问筛选 tabs（固定在顶部）
+      html += '<div class="tabs2" style="margin-bottom:8px">';
+      [["all", "全部（" + counts.all + "）"], ["s1", "阶段一 · 框架覆盖（" + counts.s1 + "）"], ["s2", "阶段二 · 开发视角（" + counts.s2 + "）"], ["data", "数据层专项（" + counts.data + "）"]].forEach(function (tab) {
+        html += '<span class="t' + (self.state.filter === tab[0] ? " active" : "") + '" data-q-filter="' + tab[0] + '">' + tab[1] + "</span>";
+      });
+      html += "</div>";
+
+      // 追问列表
+      var qs = p.questions.filter(function (q) {
+        if (self.state.filter === "all") return true;
+        if (self.state.filter === "s1") return q.stage === 1 && !q.dataLayer;
+        if (self.state.filter === "s2") return q.stage === 2 && !q.dataLayer;
+        return !!q.dataLayer;
+      });
+
+      if (!qs.length) {
+        html += '<div class="empty" style="padding:20px">该分组下暂无追问</div>';
+      } else {
+        html += '<div id="ai-questions-list">';
+        qs.forEach(function (q) {
+          var stageTag = q.dataLayer ? "数据层专项" : q.stage === 1 ? "阶段一 · 框架覆盖" : "阶段二 · 开发视角";
+          html += '<div class="q-card' + (q.status === "confirmed" ? " confirmed" : "") + (q.status === "skipped" ? " skipped" : "") + '">';
+          html += '<div class="q-head"><span class="tag ' + (q.priority === "P0" ? "red" : q.priority === "P1" ? "warn" : "") + '">' + esc(q.priority) + "</span>";
+          html += '<span class="tag blue">' + stageTag + "</span>";
+          html += '<span class="tag">' + esc(q.sectionTitle || "") + "</span>";
+          if (q.status === "confirmed") html += '<span class="tag ok">✓ 已确认</span>';
+          if (q.status === "skipped") html += '<span class="tag warn">已跳过</span>';
+          html += "</div>";
+          html += '<div class="q-text">' + esc(q.question) + "</div>";
+          if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
+          html += '<div class="q-answer">';
+          html += (q.status === "confirmed"
+            ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
+          html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
+          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px">使用建议答案</button>';
+          html += "</div>";
+          html += '<div class="q-actions">';
+          if (q.status === "confirmed") {
+            html += '<button class="btn sm" data-q-action="undo" data-q="' + q.id + '">撤销确认</button>';
+          } else {
+            html += '<button class="btn sm primary" data-q-action="confirm" data-q="' + q.id + '">确认</button>';
+            html += '<button class="btn sm" data-q-action="skip" data-q="' + q.id + '" ' + (q.status === "skipped" ? "disabled" : "") + ">跳过</button>";
+          }
+          if (q.status === "skipped") html += '<button class="btn sm" data-q-action="undo" data-q="' + q.id + '">撤销跳过</button>';
+          html += "</div></div>";
+        });
+        html += "</div>";
+      }
+
+      html += '<div class="hint" style="margin-top:12px">跳过的问题会标注在导出文末，不阻塞导出流程</div>';
+      html += "</div>"; // end q-scroll-content
+      html += "</div>"; // end q-page
+
+      return html;
+    },
+
+    renderStep2AIBar: function (p) {
+      // 追问页底部固定导航栏
+      var self = this;
+      this.setFixedBar(
+        '<button class="btn" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
+        '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
+        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px">进入富文本编辑</button>'
+      );
+      // 事件在 wireStep2AI 中绑定
+    },
+
+    wireStep2AI: function (p) {
+      var self = this;
+
+      // 系统模拟文件勾选（仅允许 2-4 份）
+      if (!self.state._selectedSamples) self.state._selectedSamples = [];
+      document.querySelectorAll("#ai-sample-grid input[type=checkbox]").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          var smId = cb.getAttribute("data-sm-id");
+          var label = cb.closest(".sample-check");
+          if (cb.checked) {
+            if (self.state._selectedSamples.length >= 4) {
+              cb.checked = false;
+              window.alert("最多选择 4 份模拟材料");
+              return;
+            }
+            if (self.state._selectedSamples.indexOf(smId) < 0) self.state._selectedSamples.push(smId);
+            if (label) label.classList.add("checked");
+          } else {
+            var idx = self.state._selectedSamples.indexOf(smId);
+            if (idx >= 0) self.state._selectedSamples.splice(idx, 1);
+            if (label) label.classList.remove("checked");
+          }
+          // 不立即加载，等确认提交
+          // 更新确认按钮上的计数
+          var confirmBtn = document.getElementById("ai-sample-confirm");
+          if (confirmBtn) confirmBtn.textContent = "确认提交（" + self.state._selectedSamples.length + " 份）";
+        });
+      });
+
+      // 确认提交按钮
+      var confirmBtn = document.getElementById("ai-sample-confirm");
+      if (confirmBtn) confirmBtn.addEventListener("click", function () {
+        var sel = self.state._selectedSamples;
+        if (sel.length < 2) { window.alert("请至少选择 2 份模拟材料"); return; }
+        if (sel.length > 4) { window.alert("最多选择 4 份模拟材料"); return; }
+        // 清除旧的模拟材料
+        p.materials = (p.materials || []).filter(function (m) { return !m._smId; });
+        // 加载所有选中材料
+        var promises = sel.map(function (smId) {
+          return SampleMaterials.loadContent(smId).then(function (text) {
+            var meta = SampleMaterials.getById(smId);
+            p.materials.push({ id: Store.uid(), label: meta.label, text: text, type: "md", _smId: smId });
+          });
+        });
+        Promise.all(promises).then(function () {
+          Store.upsertProject(p);
+          self.renderStep2(p.id);
+        }).catch(function (err) {
+          window.alert("加载材料失败：" + (err.message || "未知错误"));
+        });
+      });
+
+      // 清空选择按钮
+      var clearBtn = document.getElementById("ai-sample-clear");
+      if (clearBtn) clearBtn.addEventListener("click", function () {
+        self.state._selectedSamples = [];
+        p.materials = (p.materials || []).filter(function (m) { return !m._smId; });
+        Store.upsertProject(p);
+        self.renderStep2(p.id);
+      });
+
+      // 文本粘贴区
+      document.getElementById("ai-paste-text").addEventListener("input", function (e) { self.state.aiPasteText = e.target.value; });
+      document.getElementById("ai-add-paste").addEventListener("click", function () {
+        var text = document.getElementById("ai-paste-text").value.trim();
+        if (!text) return;
+        var firstLine = (text.split("\n")[0] || "").slice(0, 40);
+        var label = firstLine || "粘贴文本 " + (p.materials ? p.materials.length + 1 : 1);
+        p.materials = p.materials || [];
+        p.materials.push({ id: Store.uid(), label: label, text: text, type: "text" });
+        document.getElementById("ai-paste-text").value = "";
+        self.state.aiPasteText = "";
+        Store.upsertProject(p);
+        self.renderStep2(p.id);
+      });
+
+      // 文本输入框也支持 Ctrl+V 粘贴文件
+      document.getElementById("ai-paste-text").addEventListener("paste", function (e) {
+        var files = getFilesFromClipboard(e);
+        if (!files.length) return; // 普通文本粘贴
+        e.preventDefault();
+        self.handleMaterialFiles(p, files);
+      });
+
+      // 文件拖拽区
+      var dropZone = document.getElementById("ai-drop-zone");
+      if (dropZone) {
+        // 点击打开文件选择器
+        dropZone.addEventListener("click", function () { document.getElementById("ai-file-input").click(); });
+        // 拖拽高亮
+        dropZone.addEventListener("dragover", function (e) { e.preventDefault(); dropZone.classList.add("dragover"); });
+        dropZone.addEventListener("dragleave", function () { dropZone.classList.remove("dragover"); });
+        dropZone.addEventListener("drop", function (e) {
+          e.preventDefault();
+          dropZone.classList.remove("dragover");
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            self.handleMaterialFiles(p, Array.from(e.dataTransfer.files));
+          }
+        });
+        // 文件拖拽区也支持 Ctrl+V 粘贴文件
+        dropZone.addEventListener("paste", function (e) {
+          var files = getFilesFromClipboard(e);
+          if (!files.length) return;
+          e.preventDefault();
+          self.handleMaterialFiles(p, files);
+        });
+      }
+
+      // 文件选择器
+      document.getElementById("ai-file-input").addEventListener("change", function (e) {
+        var files = e.target.files;
+        if (files && files.length) self.handleMaterialFiles(p, Array.from(files));
+        e.target.value = "";
+      });
+
+      // 删除材料
+      document.querySelectorAll("[data-rm-mat]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var i = Number(btn.getAttribute("data-rm-mat"));
+          p.materials.splice(i, 1);
+          Store.upsertProject(p);
+          self.renderStep2(p.id);
+        });
+      });
+
+      // 编辑材料内容
+      document.querySelectorAll("[data-edit-mat]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var i = Number(btn.getAttribute("data-edit-mat"));
+          self.editMaterial(p, i);
+        });
+      });
+
+      // 跨部门开关
+      var cbCross = document.getElementById("ai-crossdept");
+      if (cbCross) cbCross.addEventListener("change", function () { p.crossDept = cbCross.checked; Store.upsertProject(p); });
+
+      // AI 生成
+      document.getElementById("ai-generate").addEventListener("click", function () { self.generateDraft(p); });
+
+      // 追问筛选
+      document.querySelectorAll("[data-q-filter]").forEach(function (t) {
+        t.addEventListener("click", function () {
+          self.state.filter = t.getAttribute("data-q-filter");
+          self.renderStep2(p.id);
+        });
+      });
+
+      // 追问答案输入
+      document.querySelectorAll(".q-answer-input").forEach(function (input) {
+        input.addEventListener("input", function () {
+          var id = input.getAttribute("data-q");
+          var q = p.questions.find(function (x) { return x.id === id; });
+          if (q) { q.answer = input.value; Store.upsertProject(p); }
+        });
+      });
+
+      // 追问操作
+      document.querySelectorAll("[data-q-action]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-q");
+          var q = p.questions.find(function (x) { return x.id === id; });
+          if (!q) return;
+          var action = btn.getAttribute("data-q-action");
+          if (action === "use-suggest") { q.answer = q.suggestedAnswer; self.renderStep2(p.id); return; }
+          if (action === "confirm") { q.status = "confirmed"; q.answer = q.answer || q.suggestedAnswer; }
+          else if (action === "skip") { q.status = "skipped"; }
+          else { q.status = "pending"; }
+          Store.upsertProject(p);
+          self.renderStep2(p.id);
+        });
+      });
+
+      // 追问顶部操作
+      var fbDiscard = document.getElementById("fb-discard");
+      if (fbDiscard) fbDiscard.addEventListener("click", function () { self.discardProject(p); });
+      var fbBack = document.getElementById("fb-back");
+      if (fbBack) fbBack.addEventListener("click", function () { location.hash = "#/new?id=" + encodeURIComponent(p.id); });
+      var fbGoEdit = document.getElementById("fb-go-edit");
+      if (fbGoEdit) fbGoEdit.addEventListener("click", function () {
+        self.mergeAnswers(p);
+        self.state.tab = "edit";
+        self.renderStep2(p.id);
+      });
+
+      // 批量操作
+      var btnSkipAll = document.getElementById("q-skip-all");
+      if (btnSkipAll) btnSkipAll.addEventListener("click", function () {
+        p.questions.forEach(function (q) { if (q.status === "pending") q.status = "skipped"; });
+        Store.upsertProject(p);
+        self.renderStep2(p.id);
+      });
+      var btnConfirmAll = document.getElementById("q-confirm-all");
+      if (btnConfirmAll) btnConfirmAll.addEventListener("click", function () {
+        p.questions.forEach(function (q) { if (q.status === "pending") { q.status = "confirmed"; q.answer = q.suggestedAnswer || q.answer; } });
+        Store.upsertProject(p);
+        self.renderStep2(p.id);
+      });
+      var btnEnhance = document.getElementById("q-enhance");
+      if (btnEnhance) btnEnhance.addEventListener("click", function () { self.enhanceQuestions(p); });
+    },
+
+    editMaterial: function (p, index) {
+      var self = this;
+      var m = p.materials[index];
+      if (!m) return;
+      var root = document.getElementById("modal-root") || document.body;
+      var mask = document.createElement("div");
+      mask.className = "modal-mask";
+      mask.innerHTML =
+        '<div class="modal" style="max-width:600px"><h3>✏️ 编辑材料内容</h3>' +
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + esc(m.label) + "（" + esc(m.type || "text") + "）</div>" +
+        '<textarea id="mat-edit-text" style="min-height:200px;width:100%;font-size:12.5px">' + esc(m.text || "") + "</textarea>" +
+        '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:12px;margin-bottom:0">' +
+        '<button class="btn sm" id="mat-edit-cancel">取消</button>' +
+        '<button class="btn sm primary" id="mat-edit-save">保存修改</button></div></div>';
+      root.appendChild(mask);
+      document.getElementById("mat-edit-save").addEventListener("click", function () {
+        var newText = document.getElementById("mat-edit-text").value;
+        m.text = newText;
+        // 更新标签为第一行文本
+        var firstLine = (newText.split("\n")[0] || "").trim().slice(0, 40);
+        if (firstLine) m.label = firstLine;
+        Store.upsertProject(p);
+        root.removeChild(mask);
+        self.renderStep2(p.id);
+      });
+      document.getElementById("mat-edit-cancel").addEventListener("click", function () {
+        root.removeChild(mask);
+      });
+      mask.addEventListener("click", function (e) {
+        if (e.target === mask) root.removeChild(mask);
+      });
+    },
+
+    showGenModal: function (message, onCancel) {
+      var self = this;
+      this._genCancelled = false;
+      var mask = document.createElement("div");
+      mask.className = "modal-mask";
+      mask.style.zIndex = "100000";
+      mask.id = "gen-modal";
+      mask.innerHTML =
+        '<div class="modal" style="text-align:center">' +
+        '<div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 14px"></div>' +
+        '<p style="color:#cfd6e2;font-size:14px;margin-bottom:14px">' + message + '</p>' +
+        '<button class="btn sm" id="gen-cancel-btn">取消生成</button></div>';
+      document.body.appendChild(mask);
+      document.getElementById("gen-cancel-btn").addEventListener("click", function () {
+        self._genCancelled = true;
+        document.body.removeChild(mask);
+        if (onCancel) onCancel();
+      });
+      return mask;
+    },
+
+    dismissGenModal: function () {
+      var m = document.getElementById("gen-modal");
+      if (m && m.parentElement) document.body.removeChild(m);
+    },
+
+    isGenCancelled: function () { return this._genCancelled; },
+
+    handleMaterialFiles: function (p, files) {
+      var self = this;
+      if (!files || !files.length) return;
+      p.materials = p.materials || [];
+
+      var added = 0;
+      var errors = [];
+      var pending = files.length;
+
+      function done() {
+        if (added > 0) {
+          Store.upsertProject(p);
+          self.renderStep2(p.id);
+        }
+        if (errors.length) {
+          window.alert("以下文件处理失败：\n" + errors.join("\n"));
+        }
+      }
+
+      files.forEach(function (file) {
+        if (typeof FileReader_util === "undefined") {
+          // 降级：txt/md 用 FileReader，其他报错
+          if (file.name.match(/\.(txt|md|markdown)$/i)) {
+            var reader = new FileReader();
+            reader.onload = function () {
+              p.materials.push({ id: Store.uid(), label: file.name, text: reader.result, type: file.name.endsWith(".md") ? "md" : "txt" });
+              added++;
+              pending--;
+              if (pending === 0) done();
+            };
+            reader.onerror = function () { errors.push(file.name + "：读取失败"); pending--; if (pending === 0) done(); };
+            reader.readAsText(file);
+          } else {
+            errors.push(file.name + "：文件提取模块未加载");
+            pending--;
+            if (pending === 0) done();
+          }
+          return;
+        }
+
+        FileReader_util.extractFileText(file).then(function (text) {
+          if (!text || !text.trim()) {
+            errors.push(file.name + "：内容为空");
+          } else {
+            p.materials.push({
+              id: Store.uid(),
+              label: file.name,
+              text: text,
+              type: FileReader_util.fileTypeLabel(file),
+            });
+            added++;
+          }
+          pending--;
+          if (pending === 0) done();
+        }).catch(function (err) {
+          errors.push(file.name + "：" + (err.message || "提取失败"));
+          pending--;
+          if (pending === 0) done();
+        });
+      });
+    },
+
+    generateDraft: function (p) {
+      var self = this;
+      if (!p.materials || !p.materials.length) {
+        window.alert("请先粘贴或上传至少一份材料");
+        return;
+      }
+
+      // 如果已有追问且材料未变，直接跳到追问页（不重复生成）
+      var currentMatHash = (p.materials || []).map(function (m) { return m.id + ":" + (m.text || "").length; }).sort().join("|");
+      if (p.questions && p.questions.length && p._lastMatHash === currentMatHash) {
+        location.hash = "#/questions/" + encodeURIComponent(p.id);
+        return;
+      }
+      p._lastMatHash = currentMatHash;
+      Store.upsertProject(p);
+
+      // 浏览器端用量检查
+      var remaining = Store.usageRemaining();
+      if (remaining <= 0) {
+        var limit = (typeof window !== "undefined" && window.AI_USAGE_LIMIT) ? window.AI_USAGE_LIMIT : 5;
+        window.alert("试用次数已达上限（" + limit + " 次），请明天再试或部署自己的服务端 Key。\nDemo 模式不占用额度。");
+        return;
+      }
+
+      this.state.aiGenerating = true;
+      this.state.aiError = "";
+      this.showGenModal("正在生成 PRD 初稿与追问内容...", function () {
+        self.state.aiGenerating = false;
+      });
+      this.renderStep2(p.id);
+
+      var sections = p.sections.map(function (s) { return { key: s.key, title: s.title, description: s.description || "" }; });
+
+      if (typeof AI === "undefined") {
+        // 直接用 Demo 兜底
+        var d = Demo.generateDraft(p.materials, sections, p.crossDept);
+        this.handleAIResult(p, { usedDemo: true, name: d.name, sections: d.sections });
+        return;
+      }
+
+      AI.callAi("draft", { materials: p.materials, sections: sections, crossDept: p.crossDept, prefs: p.prefs || { askDataSource: true, askDeadline: true, checkCalcLogic: false } })
+        .then(function (draft) {
+          // 生成追问
+          return AI.callAi("questions", {
+            draftSections: draft.sections,
+            sections: sections,
+            materials: p.materials,
+            prefs: p.prefs,
+          }).then(function (qRes) {
+            var questions = (qRes && qRes.questions) || [];
+            var fallbackMsg = "";
+            if (!questions.length && !(qRes && qRes.usedDemo)) {
+              try { questions = Demo.generateQuestions(draft.sections, p.materials, p.prefs); fallbackMsg = "真实模型追问失败，已用内置生成器补充"; }
+              catch (e) { fallbackMsg = "追问生成失败：" + (e && e.message ? e.message : "未知错误"); }
+            }
+            self.handleAIResult(p, {
+              usedDemo: !!(draft.usedDemo || (qRes && qRes.usedDemo)),
+              name: draft.name,
+              sections: draft.sections,
+              questions: questions,
+              fallbackMsg: fallbackMsg,
+            });
+          }).catch(function (e) {
+            try { var qs = Demo.generateQuestions(draft.sections, p.materials, p.prefs); } catch (ex) { var qs = []; }
+            self.handleAIResult(p, {
+              usedDemo: !!draft.usedDemo,
+              name: draft.name,
+              sections: draft.sections,
+              questions: qs,
+              fallbackMsg: "真实模型追问失败，已用内置生成器补充",
+            });
+          });
+        })
+        .catch(function (e) {
+          self.state.aiGenerating = false;
+          self.state.aiError = "生成失败：" + (e.message || "请稍后重试") + "（Demo 模式可用）";
+          self.dismissGenModal();
+          self.renderStep2(p.id);
+        });
+    },
+
+    handleAIResult: function (p, result) {
+      if (this.isGenCancelled()) return;
+      this.state.aiGenerating = false;
+      this.state.aiError = "";
+      this.dismissGenModal();
+
+      // 成功才计次数（Demo 模式不计数）
+      if (!result.usedDemo) {
+        Store.incrementUsage();
+      }
+
+      // 写入章节内容
+      result.sections.forEach(function (sec, i) {
+        var target = p.sections[i];
+        if (target && sec.content) target.content = sec.content;
+      });
+
+      // 更新项目名
+      if (result.name && result.name.trim()) p.name = result.name;
+
+      p.questions = result.questions || [];
+      p.usedDemo = result.usedDemo;
+      p.status = "editing";
+      Store.upsertProject(p);
+
+      // Demo 降级提示
+      if (result.usedDemo) {
+        var reason = result.demoReason || result.fallbackMsg || "";
+        if (reason) {
+          window.alert("ℹ️ " + reason + "\n\n内容已由内置 Demo 生成器产出，可在编辑器中直接修改。");
+        }
+      } else if (result.fallbackMsg) {
+        window.alert("初稿已生成，" + result.fallbackMsg);
+      }
+      // 跳转到独立的追问页面
+      location.hash = "#/questions/" + encodeURIComponent(p.id);
+    },
+
+    // ---- 独立追问页面 ----
+
+    renderQuestionsPage: function (id) {
+      var self = this;
+      var p = Store.getProject(id);
+      if (!p) {
+        this.clearFixedBar();
+        document.getElementById("app").innerHTML = '<div class="card">项目不存在。<a href="#/" class="btn sm" style="margin-left:10px">返回列表</a></div>';
+        return;
+      }
+      this.state.project = p;
+      if (!this.state.filter) this.state.filter = "all";
+
+      var total = p.questions.length;
+      if (!total) {
+        // 没有追问，回到编辑页
+        location.hash = "#/edit/" + encodeURIComponent(p.id);
+        return;
+      }
+
+      var confirmed = p.questions.filter(function (q) { return q.status === "confirmed"; }).length;
+      var pct = total ? Math.round((confirmed / total) * 100) : 0;
+      var counts = {
+        all: total,
+        s1: p.questions.filter(function (q) { return q.stage === 1 && !q.dataLayer; }).length,
+        s2: p.questions.filter(function (q) { return q.stage === 2 && !q.dataLayer; }).length,
+        data: p.questions.filter(function (q) { return q.dataLayer; }).length,
+      };
+
+      var html = "";
+      // 固定顶部：进度 + 批量操作 + 筛选tabs
+      html += '<div class="q-fixed-top">';
+      html += '<div class="banner" style="margin-bottom:6px">生成完成，AI 提出 <b>' + total + " 条追问</b>" + (p.usedDemo ? "（Demo 模式）" : "") + "</div>";
+
+      // 第一行：进度 + 次要操作靠右
+      html += '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
+      html += '<div class="progress-track" style="flex:0 1 80px"><i style="width:' + pct + '%"></i></div>';
+      html += '<span style="font-size:12px;color:var(--muted)">已确认 ' + confirmed + " / " + total + "</span>";
+      html += '<span class="spacer"></span>';
+      html += '<button class="btn sm" id="q-skip-all">一键跳过全部</button>';
+      html += '<button class="btn sm" id="q-enhance"' + (self.state.aiEnhancing ? " disabled" : "") + ">加强追问</button>";
+      html += "</div>";
+      // 第二行：一键全部使用建议答案（独占一行，显眼）
+      html += '<div class="row" style="margin-bottom:8px">';
+      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600">一键全部使用建议答案</button>';
+      html += "</div>";
+      html += '<div class="muted" style="font-size:11px;text-align:center;margin-bottom:6px">所有待确认追问将自动填入建议答案并确认，可在下方逐条修改</div>';
+
+      // 筛选tabs（固定顶部）
+      html += '<div class="tabs2">';
+      [["all", "全部（" + counts.all + "）"], ["s1", "阶段一（" + counts.s1 + "）"], ["s2", "阶段二（" + counts.s2 + "）"], ["data", "数据层（" + counts.data + "）"]].forEach(function (tab) {
+        html += '<span class="t' + (self.state.filter === tab[0] ? " active" : "") + '" data-q-filter="' + tab[0] + '">' + tab[1] + "</span>";
+      });
+      html += "</div></div>"; // end q-fixed-top
+
+      // 滚动内容：追问列表
+      html += '<div class="q-scroll-content">';
+      var qs = p.questions.filter(function (q) {
+        if (self.state.filter === "all") return true;
+        if (self.state.filter === "s1") return q.stage === 1 && !q.dataLayer;
+        if (self.state.filter === "s2") return q.stage === 2 && !q.dataLayer;
+        return !!q.dataLayer;
+      });
+
+      if (!qs.length) {
+        html += '<div class="empty" style="padding:20px">该分组下暂无追问</div>';
+      } else {
+        qs.forEach(function (q) {
+          var stageTag = q.dataLayer ? "数据层专项" : q.stage === 1 ? "阶段一" : "阶段二";
+          html += '<div class="q-card' + (q.status === "confirmed" ? " confirmed" : "") + (q.status === "skipped" ? " skipped" : "") + '">';
+          html += '<div class="q-head"><span class="tag ' + (q.priority === "P0" ? "red" : q.priority === "P1" ? "warn" : "") + '">' + esc(q.priority) + "</span>";
+          html += '<span class="tag blue">' + stageTag + "</span>";
+          html += '<span class="tag">' + esc(q.sectionTitle || "") + "</span>";
+          if (q.status === "confirmed") html += '<span class="tag ok">已确认</span>';
+          if (q.status === "skipped") html += '<span class="tag warn">已跳过</span>';
+          html += "</div>";
+          html += '<div class="q-text">' + esc(q.question) + "</div>";
+          if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
+          html += '<div class="q-answer">';
+          html += (q.status === "confirmed"
+            ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
+          html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
+          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px">使用建议答案</button>';
+          html += "</div>";
+          html += '<div class="q-actions">';
+          if (q.status === "confirmed") {
+            html += '<button class="btn sm" data-q-action="undo" data-q="' + q.id + '">撤销确认</button>';
+          } else {
+            html += '<button class="btn sm primary" data-q-action="confirm" data-q="' + q.id + '">确认</button>';
+            html += '<button class="btn sm" data-q-action="skip" data-q="' + q.id + '" ' + (q.status === "skipped" ? "disabled" : "") + ">跳过</button>";
+          }
+          if (q.status === "skipped") html += '<button class="btn sm" data-q-action="undo" data-q="' + q.id + '">撤销跳过</button>';
+          html += "</div></div>";
+        });
+      }
+      html += '<div class="hint" style="margin-top:16px">跳过的问题会标注在导出文末，不阻塞导出流程</div>';
+      html += "</div>"; // end q-scroll-content
+
+      document.getElementById("app").innerHTML = html;
+
+      // 底部导航栏
+      this.setFixedBar(
+        '<button class="btn" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
+        '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
+        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px">进入富文本编辑</button>'
+      );
+
+      // 绑定事件
+      document.getElementById("fb-discard").addEventListener("click", function () { self.discardProject(p); });
+      document.getElementById("fb-back").addEventListener("click", function () { location.hash = "#/edit/" + encodeURIComponent(p.id); });
+      document.getElementById("fb-go-edit").addEventListener("click", function () {
+        self.goToEditorWithRegen(p);
+      });
+
+      // 筛选
+      document.querySelectorAll("[data-q-filter]").forEach(function (t) {
+        t.addEventListener("click", function () { self.state.filter = t.getAttribute("data-q-filter"); self.renderQuestionsPage(p.id); });
+      });
+
+      // 答案输入：已确认锁定，改动自动撤销，Enter 确认
+      document.querySelectorAll(".q-answer-input").forEach(function (input) {
+        var qid = input.getAttribute("data-q");
+        var q = p.questions.find(function (x) { return x.id === qid; });
+        var originalAnswer = q ? q.answer : "";
+        // 已确认的输入框点击时提示
+        if (q && q.status === "confirmed") {
+          input.addEventListener("click", function () {
+            window.alert("此答案已确认，请先点击「撤销确认」后再修改");
+          });
+          input.addEventListener("focus", function () {
+            input.blur();
+            window.alert("此答案已确认，请先点击「撤销确认」后再修改");
+          });
+        }
+        input.addEventListener("input", function () {
+          if (!q) return;
+          if (q.status === "confirmed") return; // 已确认锁定
+          q.answer = input.value;
+          if (q.status === "confirmed" && q.answer !== originalAnswer) {
+            q.status = "pending";
+          }
+          Store.upsertProject(p);
+        });
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && q && q.status !== "confirmed") {
+            e.preventDefault();
+            q.status = "confirmed";
+            q.answer = q.answer || q.suggestedAnswer;
+            Store.upsertProject(p);
+            self.renderQuestionsPage(p.id);
+          }
+        });
+      });
+
+      // 追问操作
+      document.querySelectorAll("[data-q-action]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var qid = btn.getAttribute("data-q");
+          var q = p.questions.find(function (x) { return x.id === qid; });
+          if (!q) return;
+          var action = btn.getAttribute("data-q-action");
+          if (action === "use-suggest") { q.answer = q.suggestedAnswer; self.renderQuestionsPage(p.id); return; }
+          if (action === "confirm") { q.status = "confirmed"; q.answer = q.answer || q.suggestedAnswer; }
+          else if (action === "skip") { q.status = "skipped"; }
+          else { q.status = "pending"; }
+          Store.upsertProject(p);
+          self.renderQuestionsPage(p.id);
+        });
+      });
+
+      // 批量操作
+      var btnSkipAll = document.getElementById("q-skip-all");
+      if (btnSkipAll) {
+        // 检查是否全部已跳过
+        var allSkipped = p.questions.every(function (q) { return q.status === "skipped" || q.status === "confirmed"; });
+        if (allSkipped && p.questions.some(function (q) { return q.status === "skipped"; })) {
+          btnSkipAll.textContent = "撤销一键跳过全部";
+        }
+        btnSkipAll.addEventListener("click", function () {
+          var nowAllSkipped = p.questions.every(function (q) { return q.status === "skipped" || q.status === "confirmed"; });
+          if (nowAllSkipped && p.questions.some(function (q) { return q.status === "skipped"; })) {
+            // 撤销所有跳过
+            p.questions.forEach(function (q) { if (q.status === "skipped") q.status = "pending"; });
+          } else {
+            p.questions.forEach(function (q) { if (q.status === "pending") q.status = "skipped"; });
+          }
+          Store.upsertProject(p);
+          self.renderQuestionsPage(p.id);
+        });
+      }
+      var btnConfirmAll = document.getElementById("q-confirm-all");
+      if (btnConfirmAll) btnConfirmAll.addEventListener("click", function () {
+        p.questions.forEach(function (q) { if (q.status === "pending") { q.status = "confirmed"; q.answer = q.suggestedAnswer || q.answer; } });
+        Store.upsertProject(p);
+        self.renderQuestionsPage(p.id);
+      });
+      var btnEnhance = document.getElementById("q-enhance");
+      if (btnEnhance) btnEnhance.addEventListener("click", function () { self.enhanceQuestionsPage(p); });
+    },
+
+    enhanceQuestionsPage: function (p) {
+      var self = this;
+      var mask = self.showGenModal("正在加载追问...", function () {
+        // 取消不做任何事
+      });
+
+      var existing = p.questions || [];
+      if (typeof AI === "undefined") {
+        var fresh = Demo.generateEnhance(existing, p.sections, p.materials || []);
+        p.questions = existing.concat(fresh);
+        Store.upsertProject(p);
+        self.dismissGenModal();
+        self.renderQuestionsPage(p.id);
+        window.alert(fresh.length ? "加强追问完成：新增 " + fresh.length + " 条追问" : "未发现新的遗漏点");
+        return;
+      }
+
+      var sections = p.sections.map(function (s) { return { key: s.key, title: s.title, description: s.description || "" }; });
+      AI.callAi("enhance", { existing: existing, draftSections: p.sections, sections: sections, materials: p.materials || [] })
+        .then(function (res) {
+          if (self.isGenCancelled()) return;
+          var existingTexts = existing.map(function (q) { return q.question; });
+          var fresh = (res.questions || []).filter(function (q) { return existingTexts.indexOf(q.question) < 0; });
+          p.questions = existing.concat(fresh);
+          Store.upsertProject(p);
+          self.dismissGenModal();
+          self.renderQuestionsPage(p.id);
+          window.alert(fresh.length ? "加强追问完成：新增 " + fresh.length + " 条追问" : "未发现新的遗漏点");
+        })
+        .catch(function (e) {
+          if (self.isGenCancelled()) return;
+          var fresh = Demo.generateEnhance(existing, p.sections, p.materials || []);
+          p.questions = existing.concat(fresh);
+          Store.upsertProject(p);
+          self.dismissGenModal();
+          self.renderQuestionsPage(p.id);
+          window.alert(fresh.length ? "加强追问完成（Demo）：新增 " + fresh.length + " 条" : "未发现遗漏");
+        });
+    },
+
+    goToEditorWithRegen: function (p) {
+      var self = this;
+      // 先做基础合并
+      this.mergeAnswers(p);
+
+      // 检查是否有确认的答案需要 AI 重新生成
+      var confirmed = (p.questions || []).filter(function (q) { return q.status === "confirmed" && q.answer && q.answer.trim(); });
+      if (!confirmed.length) {
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        return;
+      }
+
+      // 如果和上次进入编辑时没有新增/变更确认答案，跳过 AI
+      var lastHash = p._lastConfirmHash || "";
+      var currentHash = confirmed.map(function (q) { return q.id + ":" + q.answer; }).sort().join("|");
+      if (currentHash === lastHash && p._lastConfirmHash !== undefined) {
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        return;
+      }
+      p._lastConfirmHash = currentHash;
+      Store.upsertProject(p);
+
+      var mask = self.showGenModal("正在结合追问答案重新生成内容...", function () {
+        // 取消生成，直接进入编辑（基础合并已完成）
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+      });
+
+      var qaSummary = confirmed.map(function (q) {
+        return "章节「" + q.sectionTitle + "」追问：「" + q.question + "」答案：「" + q.answer + "」";
+      }).join("\n");
+
+      var sections = p.sections.map(function (s) { return { key: s.key, title: s.title, description: s.description || "" }; });
+
+      if (typeof AI === "undefined") {
+        self.dismissGenModal();
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        return;
+      }
+
+      AI.callAi("draft", {
+        materials: (p.materials || []).concat([{ id: "qa", label: "追问确认答案", text: qaSummary, type: "text" }]),
+        sections: sections,
+        crossDept: p.crossDept,
+        prefs: p.prefs || { askDataSource: true, askDeadline: true, checkCalcLogic: false },
+      })
+        .then(function (result) {
+          if (self.isGenCancelled()) return;
+          if (result.sections) {
+            result.sections.forEach(function (sec, i) {
+              var target = p.sections[i];
+              if (target && sec.content && sec.content.trim()) {
+                target.content = sec.content;
+              }
+            });
+            Store.upsertProject(p);
+          }
+          self.dismissGenModal();
+          location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        })
+        .catch(function () {
+          if (self.isGenCancelled()) return;
+          self.dismissGenModal();
+          location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        });
+    },
+
+    mergeAnswers: function (p) {
+      var changed = false;
+      (p.questions || []).forEach(function (q) {
+        if (q.status !== "confirmed" || !q.answer || !q.answer.trim()) return;
+        var sec = p.sections.find(function (s) { return s.key === q.sectionKey; });
+        if (!sec) return;
+        var answer = q.answer.trim();
+        // 阶段一：替换「（待补充：...）」占位符
+        if (q.stage === 1 && /（待补充/.test(sec.content || "")) {
+          sec.content = (sec.content || "").replace(/（待补充[：:][^）]*）|（待补充）/g, answer);
+          changed = true;
+          return;
+        }
+        // 阶段二：追加"评审确认"
+        if ((sec.content || "").indexOf("评审确认「" + q.question + "」") >= 0) return;
+        sec.content = (sec.content || "") + '\n- 评审确认「' + q.question + '」：' + answer;
+        changed = true;
+      });
+      if (changed) Store.upsertProject(p);
+    },
+
+    enhanceQuestions: function (p) {
+      var self = this;
+      this.state.aiEnhancing = true;
+      this.renderStep2(p.id);
+
+      var existing = p.questions || [];
+      if (typeof AI === "undefined") {
+        var fresh = Demo.generateEnhance(existing, p.sections, p.materials || []);
+        p.questions = existing.concat(fresh);
+        Store.upsertProject(p);
+        this.state.aiEnhancing = false;
+        this.renderStep2(p.id);
+        window.alert(fresh.length ? "加强追问完成：新增 " + fresh.length + " 条追问（Demo 模式）" : "加强追问完成：未发现新的遗漏点");
+        return;
+      }
+
+      var sections = p.sections.map(function (s) { return { key: s.key, title: s.title, description: s.description || "" }; });
+      AI.callAi("enhance", {
+        existing: existing,
+        draftSections: p.sections,
+        sections: sections,
+        materials: p.materials || [],
+      })
+        .then(function (res) {
+          var existingTexts = existing.map(function (q) { return q.question; });
+          var fresh = (res.questions || []).filter(function (q) { return existingTexts.indexOf(q.question) < 0; });
+          p.questions = existing.concat(fresh);
+          Store.upsertProject(p);
+          self.state.aiEnhancing = false;
+          self.renderStep2(p.id);
+          window.alert(fresh.length ? "加强追问完成：新增 " + fresh.length + " 条追问" : "加强追问完成：未发现新的遗漏点");
+        })
+        .catch(function (e) {
+          var fresh = Demo.generateEnhance(existing, p.sections, p.materials || []);
+          p.questions = existing.concat(fresh);
+          Store.upsertProject(p);
+          self.state.aiEnhancing = false;
+          self.renderStep2(p.id);
+          window.alert("加强追问失败：" + (e.message || "请稍后重试") + "，已用内置生成器补充 " + fresh.length + " 条");
+        });
+    },
+
+    // ---- Step 2b: 富文本编辑 + 附件（独立页面，从 #/edit/:id?mode=editor 进入） ----
+
+    renderStep2EditorPage: function (p) {
+      var self = this;
+      this.updateStep2Meta(p);
+      document.getElementById("app").innerHTML = this.renderStep2EditorBody(p);
+      this.wireStep2EditorEvents(p);
+
+      // 底部导航
+      this.setFixedBar(
+        '<button class="btn danger" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
+        '<button class="btn" id="fb-save" style="flex:1;padding:10px 14px;font-size:13px">保存草稿</button>' +
+        '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
+        '<div class="export-menu" id="fb-export" style="position:relative;flex:1">' +
+        '<button class="btn" id="fb-export-btn" style="width:100%;padding:10px 14px;font-size:13px">导出</button>' +
+        '<div class="export-menu-items" id="fb-export-items" style="display:none;position:absolute;bottom:100%;right:0;margin-bottom:4px">' +
+        '<button class="menu-item" data-export="pdf">导出 PDF</button>' +
+        '<button class="menu-item" data-export="word">导出 Word</button>' +
+        '<button class="menu-item" data-export="md">导出 Markdown</button>' +
+        "</div></div>" +
+        '<span class="spacer"></span>' +
+        '<span id="fb-msg" class="ok-msg"></span>' +
+        '<button class="btn primary" id="fb-next" style="flex:1;padding:10px 14px;font-size:13px">下一步</button>'
+      );
+      var msg = document.getElementById("fb-msg");
+      document.getElementById("fb-save").addEventListener("click", function () { Store.upsertProject(p); if (msg) { msg.textContent = "已保存"; setTimeout(function () { msg.textContent = ""; }, 2000); } });
+      document.getElementById("fb-discard").addEventListener("click", function () { self.discardProject(p); });
+      document.getElementById("fb-back").addEventListener("click", function () {
+        if (p.questions && p.questions.length) location.hash = "#/questions/" + encodeURIComponent(p.id);
+        else location.hash = "#/edit/" + encodeURIComponent(p.id);
+      });
+      document.getElementById("fb-next").addEventListener("click", function () { location.hash = "#/preview/" + encodeURIComponent(p.id); });
+      document.getElementById("fb-export-btn").addEventListener("click", function (e) {
+        e.stopPropagation();
+        var items = document.getElementById("fb-export-items");
+        items.style.display = items.style.display === "none" ? "block" : "none";
+      });
+      document.querySelectorAll("#fb-export-items .menu-item").forEach(function (b) {
+        b.addEventListener("click", function () { document.getElementById("fb-export-items").style.display = "none";
+          var kind = b.getAttribute("data-export");
+          if (kind === "pdf") self.printPdf(p); else if (kind === "word") self.downloadWord(p); else self.downloadMarkdown(p);
+        });
+      });
+    },
+
+    wireStep2EditorEvents: function (p) {
+      var self = this;
+      document.querySelectorAll(".rte-area").forEach(function (area) {
+        area.addEventListener("input", function () {
+          var key = area.getAttribute("data-sec");
+          var sec = p.sections.find(function (x) { return x.key === key; });
+          if (sec) { sec.content = area.innerHTML; Store.upsertProject(p); self.updateStep2Meta(p);
+            var tag = document.querySelector('.sidenav .item[data-jump="' + key + '"] .tag');
+            var has = area.textContent.trim();
+            if (tag) { tag.className = "tag" + (has ? " ok" : ""); tag.textContent = has ? "✓" : "空"; }
+          }
+        });
+      });
+      document.querySelectorAll(".rte-toolbar").forEach(function (bar) {
+        var area = bar.nextElementSibling;
+        bar.querySelectorAll("[data-cmd]").forEach(function (btn) {
+          btn.addEventListener("mousedown", function (e) { e.preventDefault(); });
+          btn.addEventListener("click", function () {
+            var cmd = btn.getAttribute("data-cmd");
+            if (cmd === "image") pickImageFor(area);
+            else { area.focus(); document.execCommand(cmd, false, null); }
+          });
+        });
+        var color = bar.querySelector(".rte-color");
+        if (color) { color.addEventListener("input", function () { var sel = window.getSelection(); if (sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.getRangeAt(0).commonAncestorContainer)) { document.execCommand("foreColor", false, color.value); } else { window.alert("请先选中要设置颜色的文字"); } }); }
+      });
+      document.querySelectorAll("[data-jump]").forEach(function (el) { el.addEventListener("click", function () { var key = el.getAttribute("data-jump"); var target = document.getElementById("sec-" + key); if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); }); });
+      document.getElementById("att-add").addEventListener("click", function () { document.getElementById("att-input").click(); });
+      document.getElementById("att-input").addEventListener("change", function (e) { var files = e.target.files; if (files && files.length) self.addAttachments(p, files); e.target.value = ""; });
+      document.querySelectorAll("[data-attdel]").forEach(function (b) { b.addEventListener("click", function () { var att = p.attachments.find(function (a) { return a.id === b.getAttribute("data-attdel"); }); if (att) self.removeAttachment(p, att); }); });
+      document.querySelectorAll("[data-attdown]").forEach(function (b) { b.addEventListener("click", function () { var att = p.attachments.find(function (a) { return a.id === b.getAttribute("data-attdown"); }); if (att) self.downloadAttachment(att); }); });
+    },
+
+    renderStep2EditorBody: function (p) {
+      var self = this;
+      var html = "";
+
+      // 如果还有待确认追问，显示提醒
+      var unconfirmed = (p.questions || []).filter(function (q) { return q.status !== "confirmed" && q.status !== "skipped"; });
+      if (unconfirmed.length) {
+        html += '<div class="banner warn" style="margin-bottom:12px">⚠️ 还有 ' + unconfirmed.length + ' 条追问待确认，可切换到「AI 生成 & 追问」tab 处理</div>';
+      }
+      if (p.usedDemo) {
+        html += '<div class="banner" style="margin-bottom:12px;background:var(--neon-soft)">💡 Demo 模式生成，内容供参考。可在下方编辑器直接修改。</div>';
+      }
+
+      html += '<div class="cols" style="margin-top:0"><div class="col tight"><div class="sidenav"><div class="title">章节导航</div>';
       p.sections.forEach(function (sec) {
         var ok = (sec.content || "").trim().length > 0;
+        var pend = (p.questions || []).filter(function (q) { return q.sectionKey === sec.key && q.status === "pending"; }).length;
         html += '<div class="item" data-jump="' + sec.key + '"><span class="t">' + esc(sec.title) + "</span>";
         html += ok ? '<span class="tag ok">✓</span>' : '<span class="tag">空</span>';
+        if (pend > 0) html += '<span class="tag red" title="此章节有 ' + pend + ' 条追问待完成，建议完成（非必须）">' + pend + "</span>";
         html += "</div>";
       });
       html += "</div></div>";
@@ -652,9 +2028,14 @@
         html += '<button class="btn sm danger" data-attdel="' + a.id + '">删除</button></div>';
       });
       html += "</div></div></div>";
-      document.getElementById("app").innerHTML = html;
+      return html;
+    },
 
-      document.getElementById("e-name").addEventListener("input", function (e) { p.name = e.target.value || "未命名项目"; Store.upsertProject(p); });
+    renderStep2Editor: function (p) {
+      var self = this;
+      this.updateStep2Meta(p);
+
+      // 绑定富文本编辑器事件
       document.querySelectorAll(".rte-area").forEach(function (area) {
         area.addEventListener("input", function () {
           var key = area.getAttribute("data-sec");
@@ -719,8 +2100,8 @@
           if (att) self.downloadAttachment(att);
         });
       });
-      this.updateStep2Meta(p);
 
+      // 底部操作栏
       this.setFixedBar(
         '<button class="btn danger" id="fb-discard">放弃此 PRD</button>' +
         '<button class="btn" id="fb-save">保存草稿</button>' +
@@ -739,8 +2120,7 @@
       var msg = document.getElementById("fb-msg");
       document.getElementById("fb-save").addEventListener("click", function () {
         Store.upsertProject(p);
-        msg.textContent = "草稿已保存 ✓";
-        setTimeout(function () { msg.textContent = ""; }, 2000);
+        if (msg) { msg.textContent = "草稿已保存 ✓"; setTimeout(function () { msg.textContent = ""; }, 2000); }
       });
       document.getElementById("fb-discard").addEventListener("click", function () { self.discardProject(p); });
       document.getElementById("fb-back").addEventListener("click", function () { location.hash = "#/new?id=" + encodeURIComponent(p.id); });
@@ -759,6 +2139,7 @@
           else self.downloadMarkdown(p);
         });
       });
+
     },
 
     updateStep2Meta: function (p) {
@@ -899,10 +2280,10 @@
         document.getElementById("app").innerHTML = '<div class="card">项目不存在。<a href="#/" class="btn sm" style="margin-left:10px">返回列表</a></div>';
         return;
       }
-      var html = '<div class="row" style="justify-content:space-between">';
+      var html = '<div class="preview-sticky-top"><div class="row" style="justify-content:space-between">';
       html += '<h1 class="page-title" style="margin:0">' + esc(p.name) + "</h1>";
       html += '<div class="muted" style="font-size:12.5px">第 3 步 / 共 3 步 · 预览</div></div>';
-      html += '<div class="card"><div class="meta-row">';
+      html += '<div class="meta-row" style="margin-top:6px">';
       (p.businessLine || []).forEach(function (b) { html += '<span class="tag blue">' + esc(b) + "</span>"; });
       (p.dept || []).forEach(function (d) { html += '<span class="tag">' + esc(d) + "</span>"; });
       if (p.priority) html += '<span class="tag ' + (p.priority === "P0" ? "red" : p.priority === "P1" ? "warn" : "") + '">' + esc(p.priority) + "</span>";
@@ -931,14 +2312,16 @@
         });
       });
       this.setFixedBar(
-        '<button class="btn" id="pv-back">← 返回上一步</button>' +
-        '<button class="btn" id="pv-md">导出 Markdown</button>' +
-        '<button class="btn" id="pv-word">导出 Word</button>' +
-        '<button class="btn" id="pv-pdf">导出 PDF</button>' +
+        '<button class="btn" id="pv-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
+        '<button class="btn" id="pv-md" style="flex:1;padding:10px 14px;font-size:13px">导出 MD</button>' +
+        '<button class="btn" id="pv-word" style="flex:1;padding:10px 14px;font-size:13px">导出 Word</button>' +
+        '<button class="btn" id="pv-pdf" style="flex:1;padding:10px 14px;font-size:13px">导出 PDF</button>' +
         '<span class="spacer"></span>' +
-        '<button class="btn primary" id="pv-done">完成</button>'
+        '<button class="btn primary" id="pv-done" style="flex:1;padding:10px 14px;font-size:13px">完成</button>'
       );
-      document.getElementById("pv-back").addEventListener("click", function () { location.hash = "#/edit/" + encodeURIComponent(p.id); });
+      document.getElementById("pv-back").addEventListener("click", function () {
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+      });
       document.getElementById("pv-md").addEventListener("click", function () { self.downloadMarkdown(p); });
       document.getElementById("pv-word").addEventListener("click", function () { self.downloadWord(p); });
       document.getElementById("pv-pdf").addEventListener("click", function () { self.printPdf(p); });
@@ -974,7 +2357,7 @@
       html += '<div class="row" style="margin:0">';
       html += '<a href="#/" class="btn sm">返回列表</a>';
       if (!p.simulated) {
-        html += '<a href="#/edit/' + encodeURIComponent(p.id) + '" class="btn sm">编辑</a>';
+        html += '<a href="#/edit/' + encodeURIComponent(p.id) + '?mode=editor" class="btn sm">编辑</a>';
         html += '<button class="btn sm" id="d-status">' + (p.status === "done" ? "重新编辑" : "标记完成") + "</button>";
       }
       html += '<button class="btn sm" id="d-md">Markdown</button>';

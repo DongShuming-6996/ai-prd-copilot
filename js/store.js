@@ -16,6 +16,15 @@
       simulated: Boolean(p.simulated),
       createdAt: p.createdAt || Date.now(),
       updatedAt: p.updatedAt || Date.now(),
+      // AI 相关字段
+      materials: Array.isArray(p.materials) ? p.materials : [],
+      questions: Array.isArray(p.questions) ? p.questions : [],
+      usedDemo: Boolean(p.usedDemo),
+      crossDept: p.crossDept !== undefined ? Boolean(p.crossDept) : true,
+      prefs: p.prefs || { askDataSource: true, askDeadline: true, checkCalcLogic: false },
+      // 内部缓存标记
+      _lastMatHash: p._lastMatHash || "",
+      _lastConfirmHash: p._lastConfirmHash || "",
     };
   }
 
@@ -144,10 +153,36 @@
     },
     getUserProjects: function () { return this.loadUserProjects(); },
     clearUserData: function () {
-      // 退出时清除该用户创建的全部数据：PRD（含标签）、自定义章节/业务线/协作部门/框架模板
-      ["projects", "templates", "custom_sections", "custom_business", "custom_dept"].forEach(function (k) {
+      // 退出时清除该用户创建的全部数据：PRD（含标签）、自定义章节/业务线/协作部门/框架模板、AI设置、用量计数
+      ["projects", "templates", "custom_sections", "custom_business", "custom_dept", "settings", "usage"].forEach(function (k) {
         try { localStorage.removeItem(PREFIX + k); } catch (e) {}
       });
+    },
+
+    // ---------- 设置 ----------
+    loadSettings: function () {
+      return read("settings", { model: "", apiKey: "" });
+    },
+    saveSettings: function (settings) {
+      write("settings", settings || {});
+    },
+
+    // ---------- 浏览器端 AI 用量计数 ----------
+    getUsage: function () {
+      return read("usage", { count: 0 });
+    },
+    setUsage: function (usage) {
+      write("usage", usage || { count: 0 });
+    },
+    incrementUsage: function () {
+      var u = this.getUsage();
+      u.count = (u.count || 0) + 1;
+      this.setUsage(u);
+      return u;
+    },
+    usageRemaining: function () {
+      var limit = (typeof window !== "undefined" && window.AI_USAGE_LIMIT) ? window.AI_USAGE_LIMIT : 5;
+      return Math.max(0, limit - (this.getUsage().count || 0));
     },
     loadTemplates: function () {
       var custom = read("templates", []);
