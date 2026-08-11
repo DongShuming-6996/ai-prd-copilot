@@ -176,6 +176,9 @@
       window.addEventListener("hashchange", function () { self.route(); });
       this.route();
       this.wireExit();
+      this.wireKeyBtn();
+      // 加载用户保存的 Key
+      try { var savedKey = localStorage.getItem("prd_studio_user_key"); if (savedKey) window.AI_DIRECT_KEY = savedKey; } catch(e) {}
       this.showSplash();
       this.migrateImages();
       this.updateModeBadge();
@@ -186,6 +189,45 @@
           var items = document.getElementById("fb-export-items");
           if (items) items.style.display = "none";
         }
+      });
+    },
+
+    wireKeyBtn: function () {
+      var self = this;
+      var btn = document.getElementById("btn-key");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        var currentKey = window.AI_DIRECT_KEY || "";
+        var root = document.getElementById("modal-root");
+        root.innerHTML =
+          '<div class="modal-mask" id="key-modal-mask"><div class="modal" style="max-width:440px">' +
+          '<h3>设置 AI Key</h3>' +
+          '<p style="font-size:12px;color:var(--muted);margin:8px 0">输入 DeepSeek API Key，即可使用真实 AI 生成。<br>Key 仅保存在浏览器本地，不会上传。</p>' +
+          '<input type="password" id="key-input" placeholder="sk-..." value="' + esc(currentKey) + '" style="width:100%;margin:8px 0">' +
+          '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:12px;margin-bottom:0">' +
+          '<button class="btn sm" id="key-clear">清除 Key</button>' +
+          '<button class="btn sm" id="key-cancel">取消</button>' +
+          '<button class="btn sm primary" id="key-save">保存</button></div></div></div>';
+        document.body.appendChild(root.firstElementChild);
+        document.getElementById("key-save").addEventListener("click", function () {
+          var val = document.getElementById("key-input").value.trim();
+          window.AI_DIRECT_KEY = val;
+          try { localStorage.setItem("prd_studio_user_key", val); } catch(e) {}
+          self.updateModeBadge();
+          document.getElementById("key-modal-mask").remove();
+        });
+        document.getElementById("key-cancel").addEventListener("click", function () {
+          document.getElementById("key-modal-mask").remove();
+        });
+        document.getElementById("key-clear").addEventListener("click", function () {
+          window.AI_DIRECT_KEY = "";
+          try { localStorage.removeItem("prd_studio_user_key"); } catch(e) {}
+          self.updateModeBadge();
+          document.getElementById("key-modal-mask").remove();
+        });
+        document.getElementById("key-modal-mask").addEventListener("click", function (e) {
+          if (e.target.id === "key-modal-mask") e.target.remove();
+        });
       });
     },
 
