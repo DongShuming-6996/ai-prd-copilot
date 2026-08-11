@@ -1057,7 +1057,7 @@
       html += "</div>";
       // 第二行：一键全部使用建议答案（独占一行，显眼）
       html += '<div class="row" style="margin-bottom:8px">';
-      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600">一键全部使用建议答案</button>';
+      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600" onclick="var p=App.state.project;if(p){p.questions.forEach(function(q){if(q.status==\"pending\"){q.status=\"confirmed\";q.answer=q.suggestedAnswer||q.answer}});Store.upsertProject(p);App.renderQuestionsPage(p.id)}">一键全部使用建议答案</button>';
       html += "</div>";
       html += '<div class="muted" style="font-size:11px;text-align:center;margin-bottom:6px">所有待确认追问将自动填入建议答案并确认，可在下方逐条修改</div>';
 
@@ -1096,7 +1096,7 @@
             ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
           html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
-          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px">使用建议答案</button>';
+          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="var qid=this.getAttribute(\"data-q\");var p=App.state.project;var q=p.questions.find(function(x){return x.id===qid});if(q){q.answer=q.suggestedAnswer;Store.upsertProject(p);App.renderQuestionsPage(p.id)}">使用建议答案</button>';
           html += "</div>";
           html += '<div class="q-actions">';
           if (q.status === "confirmed") {
@@ -1124,7 +1124,7 @@
       this.setFixedBar(
         '<button class="btn" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
         '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
-        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px">进入富文本编辑</button>'
+        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px" onclick="App.goToEditorWithRegen(App.state.project)">进入富文本编辑</button>'
       );
       // 事件在 wireStep2AI 中绑定
     },
@@ -1617,7 +1617,7 @@
       html += "</div>";
       // 第二行：一键全部使用建议答案（独占一行，显眼）
       html += '<div class="row" style="margin-bottom:8px">';
-      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600">一键全部使用建议答案</button>';
+      html += '<button class="btn primary pulse" id="q-confirm-all" style="width:100%;padding:10px 16px;font-size:13px;font-weight:600" onclick="var p=App.state.project;if(p){p.questions.forEach(function(q){if(q.status==\"pending\"){q.status=\"confirmed\";q.answer=q.suggestedAnswer||q.answer}});Store.upsertProject(p);App.renderQuestionsPage(p.id)}">一键全部使用建议答案</button>';
       html += "</div>";
       html += '<div class="muted" style="font-size:11px;text-align:center;margin-bottom:6px">所有待确认追问将自动填入建议答案并确认，可在下方逐条修改</div>';
 
@@ -1656,7 +1656,7 @@
             ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
           html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
-          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px">使用建议答案</button>';
+          html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="var qid=this.getAttribute(\"data-q\");var p=App.state.project;var q=p.questions.find(function(x){return x.id===qid});if(q){q.answer=q.suggestedAnswer;Store.upsertProject(p);App.renderQuestionsPage(p.id)}">使用建议答案</button>';
           html += "</div>";
           html += '<div class="q-actions">';
           if (q.status === "confirmed") {
@@ -1678,7 +1678,7 @@
       this.setFixedBar(
         '<button class="btn" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
         '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
-        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px">进入富文本编辑</button>'
+        '<button class="btn primary" id="fb-go-edit" style="flex:1;padding:10px 14px;font-size:13px" onclick="App.goToEditorWithRegen(App.state.project)">进入富文本编辑</button>'
       );
 
       // 绑定事件
