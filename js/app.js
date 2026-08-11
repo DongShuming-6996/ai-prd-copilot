@@ -1390,6 +1390,7 @@
       var p = this.state.project;
       if (!p) return;
       p.questions.forEach(function (q) { if (q.status === "pending") { q.status = "confirmed"; q.answer = q.suggestedAnswer || q.answer; } });
+      p._lastConfirmHash = "";
       Store.upsertProject(p);
       this.renderQuestionsPage(p.id);
     },
@@ -1398,7 +1399,7 @@
       var p = this.state.project;
       if (!p || !qid) return;
       var q = p.questions.find(function (x) { return x.id === qid; });
-      if (q) { q.answer = q.suggestedAnswer; Store.upsertProject(p); this.renderQuestionsPage(p.id); }
+      if (q) { q.answer = q.suggestedAnswer; q.status = "confirmed"; Store.upsertProject(p); this.renderQuestionsPage(p.id); }
     },
     goToEditorFromQuestions: function () {
       var p = this.state.project;
@@ -1749,17 +1750,19 @@
         });
       });
 
-      // 追问操作
+      // 追问操作（任何修改清除 AI 缓存，确保下次进编辑时重新生成）
+      var clearCache = function () { p._lastConfirmHash = ""; };
       document.querySelectorAll("[data-q-action]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var qid = btn.getAttribute("data-q");
           var q = p.questions.find(function (x) { return x.id === qid; });
           if (!q) return;
           var action = btn.getAttribute("data-q-action");
-          if (action === "use-suggest") { q.answer = q.suggestedAnswer; Store.upsertProject(p); self.renderQuestionsPage(p.id); return; }
+          if (action === "use-suggest") { q.answer = q.suggestedAnswer; q.status = "confirmed"; clearCache(); Store.upsertProject(p); self.renderQuestionsPage(p.id); return; }
           if (action === "confirm") { q.status = "confirmed"; q.answer = q.answer || q.suggestedAnswer; }
           else if (action === "skip") { q.status = "skipped"; }
           else { q.status = "pending"; }
+          clearCache();
           Store.upsertProject(p);
           self.renderQuestionsPage(p.id);
         });
@@ -1776,11 +1779,11 @@
         btnSkipAll.addEventListener("click", function () {
           var nowAllSkipped = p.questions.every(function (q) { return q.status === "skipped" || q.status === "confirmed"; });
           if (nowAllSkipped && p.questions.some(function (q) { return q.status === "skipped"; })) {
-            // 撤销所有跳过
             p.questions.forEach(function (q) { if (q.status === "skipped") q.status = "pending"; });
           } else {
             p.questions.forEach(function (q) { if (q.status === "pending") q.status = "skipped"; });
           }
+          p._lastConfirmHash = "";
           Store.upsertProject(p);
           self.renderQuestionsPage(p.id);
         });
@@ -1847,6 +1850,13 @@
         return;
       }
 
+      // 确认答案无变化 → 跳过 AI 重新生成
+      var currentHash = confirmed.map(function (q) { return q.id + ":" + q.answer; }).sort().join("|");
+      if (p._lastConfirmHash === currentHash) {
+        location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
+        return;
+      }
+
       var mask = self.showGenModal("正在结合追问答案重新生成内容...", function () {
         // 取消生成，直接进入编辑（基础合并已完成）
         location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
@@ -1880,6 +1890,7 @@
               }
             });
             Store.upsertProject(p);
+            p._lastConfirmHash = currentHash;
           }
           self.dismissGenModal();
           location.hash = "#/edit/" + encodeURIComponent(p.id) + "?mode=editor";
