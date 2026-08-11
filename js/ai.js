@@ -5,8 +5,14 @@
 
   async function checkServerKey() {
     if (serverHasKey !== null) return serverHasKey;
+    // 如果已配置直连 Key，跳过服务端检测节省时间
+    var dk = (typeof window !== "undefined" && window.AI_DIRECT_KEY) || "";
+    if (dk) { serverHasKey = false; return false; }
     try {
-      var res = await fetch(API_BASE + "/api/status", { method: "GET" });
+      var controller = new AbortController();
+      var timeout = setTimeout(function () { controller.abort(); }, 3000);
+      var res = await fetch(API_BASE + "/api/status", { method: "GET", signal: controller.signal });
+      clearTimeout(timeout);
       var data = await res.json();
       serverHasKey = !!(data && data.hasEnvKey);
     } catch (e) {
@@ -29,18 +35,30 @@
     var settings = Store.loadSettings();
     var useServer = await checkServerKey();
     var clientKey = (settings.apiKey || "").trim();
+    var directKey = (typeof window !== "undefined" && window.AI_DIRECT_KEY) || "";
+    // 自动解码 base64
+    if (directKey && !directKey.startsWith("sk-")) { try { directKey = atob(directKey); } catch(e) {} }
 
-    // 服务端无 Key 且本地也未填 Key → Demo 模式
-    if (!useServer && !clientKey) {
+    // 服务端无 Key 且无任何可用 Key → Demo 模式
+    if (!useServer && !clientKey && !directKey) {
       return fallbackToDemo(action, payload);
     }
 
-    // 服务端 Key 已知无效 → 直接 Demo
-    if (serverKeyInvalid && !clientKey) {
+    // 服务端 Key 已知无效且无直连 Key → Demo
+    if (serverKeyInvalid && !clientKey && !directKey) {
       return fallbackToDemo(action, payload);
     }
 
-    // 真实模式：优先服务端代理，不可用时直连 DeepSeek
+    // 有直连 Key → 优先直连，跳过可能不可用的服务端
+    if (directKey && directKey.startsWith("sk-")) {
+      try {
+        return await callDirectAPI(action, payload, directKey);
+      } catch (e2) {
+        // 直连失败 → 尝试服务端
+      }
+    }
+
+    // 真实模式：经服务端代理
     try {
       var res = await fetch(API_BASE + "/api/ai", {
         method: "POST",
@@ -61,19 +79,6 @@
       serverKeyInvalid = false;
       return data;
     } catch (e) {
-      // 服务端不可用 → 尝试直连 DeepSeek
-      var directKey = (typeof window !== "undefined" && window.AI_DIRECT_KEY) || "";
-      // 自动解码 base64 格式的 Key
-      if (directKey && !directKey.startsWith("sk-")) {
-        try { directKey = atob(directKey); } catch(e) {}
-      }
-      if (directKey && directKey.startsWith("sk-")) {
-        try {
-          return await callDirectAPI(action, payload, directKey);
-        } catch (e2) {
-          // 直连也失败 → Demo
-        }
-      }
       if (e.message && (e.message.indexOf("Failed to fetch") >= 0 || e.message.indexOf("NetworkError") >= 0)) {
         return fallbackToDemo(action, payload);
       }
@@ -102,7 +107,7 @@
     var res = await fetch(base + "/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify({ model: model, messages: [{role:"system",content:systemPrompt},{role:"user",content:userPrompt}], temperature: 0.4 })
+      body: JSON.stringify({ model: model, messages: [{role:"system",content:systemPrompt},{role:"user",content:userPrompt}], temperature: 0.4, max_tokens: 4096 })
     });
     if (!res.ok) {
       var errText = await res.text().catch(function(){return "";});
