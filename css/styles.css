@@ -1037,7 +1037,7 @@ th { background: rgba(255, 255, 255, 0.06); font-weight: 600; }
   position: fixed;
   inset: 0;
   z-index: 9998;
-  background: rgba(5, 6, 10, 0.72);
+  background: rgba(5, 6, 10, 0.32);
   pointer-events: all;
   transition: opacity 0.3s;
 }
@@ -1045,7 +1045,7 @@ th { background: rgba(255, 255, 255, 0.06); font-weight: 600; }
   position: fixed;
   z-index: 9999;
   border-radius: 12px;
-  box-shadow: 0 0 0 9999px rgba(5, 6, 10, 0.72), 0 0 24px rgba(200, 255, 61, 0.3);
+  box-shadow: 0 0 0 9999px rgba(5, 6, 10, 0.32), 0 0 24px rgba(200, 255, 61, 0.3);
   pointer-events: none;
   transition: all 0.35s ease;
 }

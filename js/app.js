@@ -252,16 +252,18 @@
       mask.innerHTML =
         '<div class="modal"><h3>欢迎使用 AI PRD Studio</h3>' +
         '<p style="margin:10px 0;color:#cfd6e2;line-height:1.9">AI 驱动的 PRD 撰写与管理工具。粘贴需求材料 → AI 生成初稿 → 两阶段追问澄清 → 富文本兜底完善 → 导出。系统已内置 50 条模拟 PRD 供预览。</p>' +
-        '<div class="row" style="justify-content:flex-end;margin-top:16px;margin-bottom:0"><button class="btn primary" id="splash-ok">开始使用</button></div></div>';
+        '<div class="row" style="justify-content:center;margin-top:16px;margin-bottom:0;color:var(--muted);font-size:12px">点击任意位置继续</div></div>';
       document.body.appendChild(mask);
       var self = this;
-      document.getElementById("splash-ok").addEventListener("click", function () {
-        document.body.removeChild(mask);
+      var close = function () {
+        if (mask.parentElement) document.body.removeChild(mask);
+        document.removeEventListener("click", close);
         // 无缝衔接：关掉欢迎弹窗后立即启动新手引导
         if (parseHash().page === "list") {
           self.maybeStartTour();
         }
-      });
+      };
+      setTimeout(function () { document.addEventListener("click", close); }, 50);
     },
 
     // ---------- 新手引导 Tour ----------
@@ -361,11 +363,7 @@
         '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + esc(data.title) + "</div>" +
         '<div style="color:#cfd6e2">' + data.text + "</div>" +
         '<div class="tour-progress">' + dots + " " + (step + 1) + " / " + this._tourSteps.length + "</div>" +
-        '<div class="btn-row">' +
-        (step < this._tourSteps.length - 1
-          ? '<button class="btn sm primary" id="tour-next">我知道了</button>'
-          : '<button class="btn sm primary" id="tour-finish">开始体验</button>') +
-        "</div>";
+        '<div style="color:var(--muted);font-size:12px;margin-top:6px">点击任意位置继续</div>';
 
       document.body.appendChild(tip);
 
@@ -394,30 +392,18 @@
         tip.style.top = Math.max(40, (window.innerHeight - tipH) / 2) + "px";
       }
 
-      // 事件绑定
-      var nextBtn = document.getElementById("tour-next");
-      var finishBtn = document.getElementById("tour-finish");
-      if (nextBtn) {
-        nextBtn.addEventListener("click", function () {
-          // 恢复目标 z-index
-          if (target) { target.style.position = ""; target.style.zIndex = ""; }
+      // 点击任意位置继续
+      var advance = function () {
+        if (target) { target.style.position = ""; target.style.zIndex = ""; }
+        if (step < self._tourSteps.length - 1) {
           self._tourStep++;
           self.renderTourStep();
-        });
-      }
-      if (finishBtn) {
-        finishBtn.addEventListener("click", function () {
-          if (target) { target.style.position = ""; target.style.zIndex = ""; }
+        } else {
           self.endTour();
-        });
-      }
-
-      // 点击遮罩也可关闭（最后一步）
-      if (step === self._tourSteps.length - 1) {
-        overlay.addEventListener("click", function () {
-          self.endTour();
-        });
-      }
+        }
+      };
+      overlay.addEventListener("click", advance);
+      tip.addEventListener("click", advance);
     },
 
     endTour: function (silent) {
@@ -433,6 +419,51 @@
         // 新手引导结束后，展示创建 PRD 邀请提示
         this.showCreateInvite();
       }
+    },
+
+    showStepTip: function (opts) {
+      try {
+        if (localStorage.getItem("prd_studio_tip_" + opts.key)) return;
+      } catch (e) {}
+      var target = opts.selector ? opts.selector() : null;
+      if (!target) return;
+      var overlay = document.createElement("div");
+      overlay.className = "tour-overlay";
+      overlay.id = "tour-overlay";
+      document.body.appendChild(overlay);
+      var spot = document.createElement("div");
+      spot.className = "tour-spotlight";
+      spot.id = "tour-spotlight";
+      var rect = target.getBoundingClientRect();
+      spot.style.left = (rect.left - 6) + "px";
+      spot.style.top = (rect.top - 6) + "px";
+      spot.style.width = (rect.width + 12) + "px";
+      spot.style.height = (rect.height + 12) + "px";
+      document.body.appendChild(spot);
+      var tip = document.createElement("div");
+      tip.className = "tour-tip";
+      tip.id = "tour-tip";
+      tip.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + esc(opts.title) + '</div>' +
+        '<div style="color:#cfd6e2">' + opts.text + '</div>' +
+        '<div style="color:var(--muted);font-size:12px;margin-top:6px">点击任意位置继续</div>';
+      document.body.appendChild(tip);
+      var tipH = tip.offsetHeight, tipW = tip.offsetWidth;
+      var r = target.getBoundingClientRect();
+      var left = Math.max(10, Math.min(r.left + r.width / 2 - tipW / 2, window.innerWidth - tipW - 10));
+      var top;
+      if (opts.arrow === "bottom") { top = r.bottom + 14; tip.className += " arrow-bottom"; }
+      else { top = r.top - tipH - 14; tip.className += " arrow-top"; }
+      top = Math.max(10, Math.min(top, window.innerHeight - tipH - 10));
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+      var close = function () {
+        try { localStorage.setItem("prd_studio_tip_" + opts.key, "1"); } catch (e) {}
+        if (spot.parentElement) document.body.removeChild(spot);
+        if (tip.parentElement) document.body.removeChild(tip);
+        if (overlay.parentElement) document.body.removeChild(overlay);
+        document.removeEventListener("click", close);
+      };
+      setTimeout(function () { document.addEventListener("click", close); }, 50);
     },
 
     showCreateInvite: function () {
@@ -924,6 +955,16 @@
 
       // 绑定 AI 材料输入事件
       this.wireStep2AI(p);
+      // 材料输入页引导
+      setTimeout(function () {
+        self.showStepTip({
+          key: "material",
+          title: "三种方式提供材料",
+          text: "可以<b style=\"color:var(--neon)\">勾选系统模拟文件</b>（推荐）、拖拽文件或粘贴文本，零配置即可体验。准备好材料后点击下方「AI 生成 PRD 初稿」。",
+          selector: function () { return document.getElementById("ai-sample-grid") || document.getElementById("ai-generate"); },
+          arrow: "top"
+        });
+      }, 400);
     },
 
     // ---- Step 2a: AI 生成 & 追问面板 ----
@@ -1835,6 +1876,16 @@
       });
       var btnEnhance = document.getElementById("q-enhance");
       if (btnEnhance) btnEnhance.addEventListener("click", function () { self.enhanceQuestionsPage(p); });
+      // 追问页引导
+      setTimeout(function () {
+        self.showStepTip({
+          key: "questions",
+          title: "高效处理追问",
+          text: "点击「一键全部使用建议答案」可快速填入全部建议并确认，也可以逐条单独处理。确认后的答案会融合进正文。",
+          selector: function () { return document.getElementById("q-confirm-all"); },
+          arrow: "bottom"
+        });
+      }, 400);
     },
 
     enhanceQuestionsPage: function (p) {
@@ -2232,7 +2283,7 @@
         b.addEventListener("click", function () {
           document.getElementById("fb-export-items").style.display = "none";
           var kind = b.getAttribute("data-export");
-          if (kind === "pdf") self.printPdf(p);
+          if (kind === "pdf") self.downloadPdf(p);
           else if (kind === "word") self.downloadWord(p);
           else self.downloadMarkdown(p);
         });
@@ -2422,12 +2473,32 @@
       });
       document.getElementById("pv-md").addEventListener("click", function () { self.downloadMarkdown(p); });
       document.getElementById("pv-word").addEventListener("click", function () { self.downloadWord(p); });
-      document.getElementById("pv-pdf").addEventListener("click", function () { self.printPdf(p); });
+      document.getElementById("pv-pdf").addEventListener("click", function () { self.downloadPdf(p); });
       document.getElementById("pv-done").addEventListener("click", function () {
         p.status = "done";
         Store.upsertProject(p);
         location.hash = "#/";
+        // 完成退出后 2 秒，提醒点击右上角退出
+        setTimeout(function () {
+          self.showStepTip({
+            key: "exit",
+            title: "结束体验",
+            text: "体验结束后，可点击右上角<b style=\"color:var(--neon)\">「退出」</b>一键清除你创建的 PRD，系统模拟数据会保留。",
+            selector: function () { return document.getElementById("btn-exit"); },
+            arrow: "bottom"
+          });
+        }, 2000);
       });
+      // 预览页引导：5 秒后提示点击完成退出预览
+      setTimeout(function () {
+        self.showStepTip({
+          key: "preview",
+          title: "预览确认",
+          text: "确认 PRD 内容无误后，点击<b style=\"color:var(--neon)\">「完成」</b>退出预览并返回列表；需要修改可点击「返回上一步」回到编辑。",
+          selector: function () { return document.getElementById("pv-done"); },
+          arrow: "top"
+        });
+      }, 5000);
     },
 
     // ---------- 5. PRD 详情页 ----------
@@ -2487,7 +2558,7 @@
       });
       document.getElementById("d-md").addEventListener("click", function () { self.downloadMarkdown(p); });
       document.getElementById("d-word").addEventListener("click", function () { self.downloadWord(p); });
-      document.getElementById("d-pdf").addEventListener("click", function () { self.printPdf(p); });
+      document.getElementById("d-pdf").addEventListener("click", function () { self.downloadPdf(p); });
       var dDel = document.getElementById("d-del");
       if (dDel) dDel.addEventListener("click", function () {
         if (!window.confirm("确认删除该项目？该操作不可恢复。")) return;
@@ -2518,7 +2589,7 @@
     },
 
     downloadWord: function (p) {
-      var html = Export.exportHtml(p);
+      var html = Export.exportWordHtml(p);
       var blob = new Blob(["\ufeff" + html], { type: "application/msword" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
@@ -2528,25 +2599,14 @@
       URL.revokeObjectURL(url);
     },
 
-    printPdf: function (p) {
-      // 方案：把导出版本注入页面内隐藏打印区，再同步调用 window.print()。
-      // 相比「0x0 隐藏 iframe + 延迟 print()」，不会被浏览器静默拦截，桌面/手机均可导出 PDF。
-      var full = Export.exportHtml(p);
-      var body = full.replace(/^[\s\S]*?<body>/, "").replace(/<\/body>[\s\S]*$/, "");
-      var root = document.getElementById("print-root");
-      if (!root) {
-        root = document.createElement("div");
-        root.id = "print-root";
-        root.setAttribute("aria-hidden", "true");
-        document.body.appendChild(root);
-      }
-      root.innerHTML = body;
-      var cleanup = function () {
-        root.innerHTML = "";
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
-      window.print();
+    downloadPdf: function (p) {
+      var blob = Export.buildPdfBlob(p);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = p.name.replace(/[\/\\:*?"<>|]/g, "-") + ".pdf";
+      a.click();
+      URL.revokeObjectURL(url);
     },
   };
 
