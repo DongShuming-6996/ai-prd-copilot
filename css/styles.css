@@ -972,7 +972,7 @@ th { background: rgba(255, 255, 255, 0.06); font-weight: 600; }
 .locked-input-wrap textarea {
   background: transparent; border: 1px solid var(--line); border-radius: 8px;
   color: var(--text); font-size: 13px; padding: 8px 10px; font-family: inherit;
-  line-height: 1.6; field-sizing: content;
+  line-height: 1.6; white-space: pre-wrap; word-break: break-word; display: block;
 }
 .locked-input-wrap .locked-tooltip {
   display: none;

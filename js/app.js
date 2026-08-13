@@ -1086,7 +1086,7 @@
           if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
           html += '<div class="q-answer">';
           html += (q.status === "confirmed"
-            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none;overflow:hidden" rows="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none" data-autoheight="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
           html += '<div class="q-suggest">' + (q.actionGuidance ? '行动建议：' + esc(q.actionGuidance) : '参考答案：' + esc(q.suggestedAnswer || '（无）')) + "</div>";
           html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="App.useSuggestAnswer(this)">使用建议答案</button>';
@@ -1708,7 +1708,7 @@
           if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
           html += '<div class="q-answer">';
           html += (q.status === "confirmed"
-            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none;overflow:hidden" rows="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none" data-autoheight="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
           html += '<div class="q-suggest">' + (q.actionGuidance ? '行动建议：' + esc(q.actionGuidance) : '参考答案：' + esc(q.suggestedAnswer || '（无）')) + "</div>";
           html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="App.useSuggestAnswer(this)">使用建议答案</button>';
@@ -1728,6 +1728,12 @@
       html += "</div>"; // end q-scroll-content
 
       document.getElementById("app").innerHTML = html;
+
+      // 已确认 textarea 自动撑高显示完整答案
+      document.querySelectorAll("textarea[data-autoheight]").forEach(function (ta) {
+        ta.style.height = "auto";
+        ta.style.height = (ta.scrollHeight + 2) + "px";
+      });
 
       // 底部导航栏
       this.setFixedBar(
