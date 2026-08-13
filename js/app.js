@@ -2022,41 +2022,19 @@
       document.getElementById("app").innerHTML = this.renderStep2EditorBody(p);
       this.wireStep2EditorEvents(p);
 
-      // 底部导航
+      // 底部导航（无导出、无保存草稿）
       this.setFixedBar(
         '<button class="btn danger" id="fb-discard" style="flex:1;padding:10px 14px;font-size:13px">放弃此 PRD</button>' +
-        '<button class="btn" id="fb-save" style="flex:1;padding:10px 14px;font-size:13px">保存草稿</button>' +
         '<button class="btn" id="fb-back" style="flex:1;padding:10px 14px;font-size:13px">返回上一步</button>' +
-        '<div class="export-menu" id="fb-export" style="position:relative;flex:1">' +
-        '<button class="btn" id="fb-export-btn" style="width:100%;padding:10px 14px;font-size:13px">导出</button>' +
-        '<div class="export-menu-items" id="fb-export-items" style="display:none;position:absolute;bottom:100%;right:0;margin-bottom:4px">' +
-        '<button class="menu-item" data-export="pdf">导出 PDF</button>' +
-        '<button class="menu-item" data-export="word">导出 Word</button>' +
-        '<button class="menu-item" data-export="md">导出 Markdown</button>' +
-        "</div></div>" +
         '<span class="spacer"></span>' +
-        '<span id="fb-msg" class="ok-msg"></span>' +
         '<button class="btn primary" id="fb-next" style="flex:1;padding:10px 14px;font-size:13px">下一步</button>'
       );
-      var msg = document.getElementById("fb-msg");
-      document.getElementById("fb-save").addEventListener("click", function () { Store.upsertProject(p); if (msg) { msg.textContent = "已保存"; setTimeout(function () { msg.textContent = ""; }, 2000); } });
       document.getElementById("fb-discard").addEventListener("click", function () { self.discardProject(p); });
       document.getElementById("fb-back").addEventListener("click", function () {
         if (p.questions && p.questions.length) location.hash = "#/questions/" + encodeURIComponent(p.id);
         else location.hash = "#/edit/" + encodeURIComponent(p.id);
       });
       document.getElementById("fb-next").addEventListener("click", function () { location.hash = "#/preview/" + encodeURIComponent(p.id); });
-      document.getElementById("fb-export-btn").addEventListener("click", function (e) {
-        e.stopPropagation();
-        var items = document.getElementById("fb-export-items");
-        items.style.display = items.style.display === "none" ? "block" : "none";
-      });
-      document.querySelectorAll("#fb-export-items .menu-item").forEach(function (b) {
-        b.addEventListener("click", function () { document.getElementById("fb-export-items").style.display = "none";
-          var kind = b.getAttribute("data-export");
-          if (kind === "pdf") self.printPdf(p); else if (kind === "word") self.downloadWord(p); else self.downloadMarkdown(p);
-        });
-      });
     },
 
     wireStep2EditorEvents: function (p) {
