@@ -930,8 +930,6 @@
 
     renderStep2AI: function (p) {
       var self = this;
-      var hasGenerated = p.questions && p.questions.length > 0;
-
       var html = "";
       // 材料输入区
       html += '<div class="card"><div class="material-main-title">材料输入</div>';
@@ -1013,11 +1011,6 @@
       }
       html += "</div>";
 
-      // 追问面板（生成后显示）
-      if (hasGenerated) {
-        html += this.renderQuestionsHTML(p);
-      }
-
       return html;
     },
 
@@ -1093,9 +1086,9 @@
           if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
           html += '<div class="q-answer">';
           html += (q.status === "confirmed"
-            ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none;overflow:hidden" rows="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
-          html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
+          html += '<div class="q-suggest">' + (q.actionGuidance ? '行动建议：' + esc(q.actionGuidance) : '参考答案：' + esc(q.suggestedAnswer || '（无）')) + "</div>";
           html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="App.useSuggestAnswer(this)">使用建议答案</button>';
           html += "</div>";
           html += '<div class="q-actions">';
@@ -1388,8 +1381,14 @@
     // ---- onclick 辅助函数（HTML onclick 中无转义调用） ----
     confirmAllAnswers: function () {
       var p = this.state.project;
-      if (!p) return;
-      p.questions.forEach(function (q) { if (q.status === "pending") { q.status = "confirmed"; q.answer = q.suggestedAnswer || q.answer; } });
+      if (!p || !p.questions) { alert('BUG: 项目或追问数据丢失 p='+!!p+' qs='+!!(p&&p.questions)); return; }
+      var done = 0, skipped = 0;
+      p.questions.forEach(function (q) {
+        if (q.status !== "pending") return;
+        if (q.suggestedAnswer && q.suggestedAnswer.trim()) {
+          q.status = "confirmed"; q.answer = q.suggestedAnswer; done++;
+        } else { skipped++; }
+      });
       p._lastConfirmHash = "";
       Store.upsertProject(p);
       this.renderQuestionsPage(p.id);
@@ -1397,9 +1396,15 @@
     useSuggestAnswer: function (btn) {
       var qid = btn.getAttribute("data-q");
       var p = this.state.project;
-      if (!p || !qid) return;
-      var q = p.questions.find(function (x) { return x.id === qid; });
-      if (q) { q.answer = q.suggestedAnswer; q.status = "confirmed"; Store.upsertProject(p); this.renderQuestionsPage(p.id); }
+      if (!p || !qid) { alert('qid='+qid+' p='+!!p); return; }
+      var allIds = (p.questions||[]).map(function(x){return x.id;}).join(',');
+      var q = (p.questions||[]).find(function (x) { return x.id === qid; });
+      if (!q) { alert('未找到追问。按钮ID:'+qid+' 实际IDs:'+allIds.slice(0,100)); return; }
+      if (!q.suggestedAnswer || !q.suggestedAnswer.trim()) { alert('此问题无建议答案，请手动填写'); return; }
+      q.answer = q.suggestedAnswer;
+      q.status = "confirmed";
+      Store.upsertProject(p);
+      this.renderQuestionsPage(p.id);
     },
     goToEditorFromQuestions: function () {
       var p = this.state.project;
@@ -1568,16 +1573,45 @@
         Store.incrementUsage();
       }
 
-      // 写入章节内容
-      result.sections.forEach(function (sec, i) {
-        var target = p.sections[i];
-        if (target && sec.content) target.content = sec.content;
+      // 写入章节内容——key 匹配 + 标题推导 + 索引兜底
+      // 先给每个返回的 section 补 key（从标题推导）
+      var aiSecs = (result.sections || []).map(function (s, i) {
+        if (!s.key) {
+          var t = (s.title || "");
+          var m = t.match(/^\s*(\d+)/);
+          if (m) s.key = "section-" + m[1];
+          else s.key = "sec-" + i;
+        }
+        return s;
+      });
+      // 建立模板 key 到 AI section 的映射
+      var secMap = {};
+      aiSecs.forEach(function (s) { if (s.key) secMap[s.key] = s; });
+      // 模板标题关键词 → AI section 关键词模糊匹配
+      var byTitle = {};
+      aiSecs.forEach(function (s, i) {
+        var t = (s.title || "").toLowerCase();
+        if (t.indexOf("名称") >= 0 || t.indexOf("name") >= 0) byTitle["name"] = s;
+        if (t.indexOf("背景") >= 0 || t.indexOf("background") >= 0) byTitle["background"] = s;
+        if (t.indexOf("目标") >= 0 || t.indexOf("goal") >= 0) byTitle["goal"] = s;
+        if (t.indexOf("价值") >= 0 || t.indexOf("value") >= 0) byTitle["value"] = s;
+        if (t.indexOf("改进") >= 0 || t.indexOf("improve") >= 0) byTitle["improvements"] = s;
+        if (t.indexOf("数据") >= 0) byTitle["data"] = s;
+        if (t.indexOf("后端") >= 0 || t.indexOf("backend") >= 0) byTitle["backend"] = s;
+        if (t.indexOf("前端") >= 0 || t.indexOf("frontend") >= 0) byTitle["frontend"] = s;
+        if (t.indexOf("验收") >= 0 || t.indexOf("accept") >= 0) byTitle["acceptance"] = s;
+        if (t.indexOf("测试") >= 0 || t.indexOf("test") >= 0) byTitle["test"] = s;
+      });
+      // 按模板顺序写入
+      p.sections.forEach(function (target, i) {
+        var hit = secMap[target.key] || byTitle[target.key] || aiSecs[i];
+        if (hit && hit.content && hit.content.trim()) target.content = hit.content;
       });
 
       // 更新项目名
       if (result.name && result.name.trim()) p.name = result.name;
 
-      p.questions = result.questions || [];
+      p.questions = (result.questions || []).map(function (q, i) { if (!q.id) q.id = "q-" + (i + 1); if (!q.status) q.status = "pending"; if (q.answer === undefined) q.answer = ""; if (q.actionGuidance === undefined) q.actionGuidance = ""; return q; });
       p.usedDemo = result.usedDemo;
       p.status = "editing";
       Store.upsertProject(p);
@@ -1609,11 +1643,10 @@
       if (!this.state.filter) this.state.filter = "all";
 
       var total = p.questions.length;
-      if (!total) {
-        // 没有追问，回到编辑页
-        location.hash = "#/edit/" + encodeURIComponent(p.id);
-        return;
-      }
+      if (!total) { location.hash = "#/edit/" + encodeURIComponent(p.id); return; }
+      // 检测追问是否有 id
+      var noId = p.questions.filter(function(q){return !q.id;}).length;
+      if (noId > 0) { window.alert('错误：' + noId + '/' + total + ' 条追问缺少 id 字段，已自动修复。请重新生成。'); location.hash = "#/edit/" + encodeURIComponent(p.id); return; }
 
       var confirmed = p.questions.filter(function (q) { return q.status === "confirmed"; }).length;
       var pct = total ? Math.round((confirmed / total) * 100) : 0;
@@ -1675,9 +1708,9 @@
           if (q.impact) html += '<div class="q-risk"><span class="q-risk-label">缺失风险：</span>' + esc(q.impact) + "</div>";
           html += '<div class="q-answer">';
           html += (q.status === "confirmed"
-            ? '<div class="locked-input-wrap"><input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" readonly style="opacity:0.6;cursor:not-allowed"><span class="locked-tooltip">请先进行撤销确认</span></div>'
+            ? '<div class="locked-input-wrap"><textarea class="q-answer-input" data-q="' + q.id + '" readonly style="opacity:0.6;cursor:not-allowed;height:auto;min-height:38px;resize:none;overflow:hidden" rows="1">' + esc(q.answer || "") + '</textarea><span class="locked-tooltip">请先进行撤销确认</span></div>'
             : '<input type="text" class="q-answer-input" data-q="' + q.id + '" value="' + esc(q.answer || "") + '" placeholder="输入你的答案">');
-          html += '<div class="q-suggest">建议：' + esc(q.suggestedAnswer || "（无）") + "</div>";
+          html += '<div class="q-suggest">' + (q.actionGuidance ? '行动建议：' + esc(q.actionGuidance) : '参考答案：' + esc(q.suggestedAnswer || '（无）')) + "</div>";
           html += '<button class="btn sm" data-q-action="use-suggest" data-q="' + q.id + '" style="margin-top:6px" onclick="App.useSuggestAnswer(this)">使用建议答案</button>';
           html += "</div>";
           html += '<div class="q-actions">';
@@ -1883,11 +1916,27 @@
         .then(function (result) {
           if (self.isGenCancelled()) return;
           if (result.sections) {
-            result.sections.forEach(function (sec, i) {
-              var target = p.sections[i];
-              if (target && sec.content && sec.content.trim()) {
-                target.content = sec.content;
-              }
+            var rSecs = (result.sections || []).map(function (s, i) {
+              if (!s.key) { var m = (s.title || "").match(/^\s*(\d+)/); s.key = m ? "section-" + m[1] : "sec-" + i; } return s;
+            });
+            var rMap = {}; rSecs.forEach(function (s) { if (s.key) rMap[s.key] = s; });
+            var rByTitle = {};
+            rSecs.forEach(function (s) {
+              var t = (s.title || "").toLowerCase();
+              if (t.indexOf("名称") >= 0) rByTitle["name"] = s;
+              if (t.indexOf("背景") >= 0) rByTitle["background"] = s;
+              if (t.indexOf("目标") >= 0) rByTitle["goal"] = s;
+              if (t.indexOf("价值") >= 0) rByTitle["value"] = s;
+              if (t.indexOf("改进") >= 0) rByTitle["improvements"] = s;
+              if (t.indexOf("数据") >= 0) rByTitle["data"] = s;
+              if (t.indexOf("后端") >= 0) rByTitle["backend"] = s;
+              if (t.indexOf("前端") >= 0) rByTitle["frontend"] = s;
+              if (t.indexOf("验收") >= 0) rByTitle["acceptance"] = s;
+              if (t.indexOf("测试") >= 0) rByTitle["test"] = s;
+            });
+            p.sections.forEach(function (target, i) {
+              var hit = rMap[target.key] || rByTitle[target.key] || rSecs[i];
+              if (hit && hit.content && hit.content.trim()) target.content = hit.content;
             });
             Store.upsertProject(p);
             p._lastConfirmHash = currentHash;

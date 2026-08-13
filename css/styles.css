@@ -965,6 +965,14 @@ th { background: rgba(255, 255, 255, 0.06); font-weight: 600; }
 /* 已确认输入框锁定 + 悬停提示 */
 .locked-input-wrap {
   position: relative;
+  width: 100%;
+}
+.locked-input-wrap input,
+.locked-input-wrap textarea { width: 100%; box-sizing: border-box; }
+.locked-input-wrap textarea {
+  background: transparent; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 13px; padding: 8px 10px; font-family: inherit;
+  line-height: 1.6; field-sizing: content;
 }
 .locked-input-wrap .locked-tooltip {
   display: none;
