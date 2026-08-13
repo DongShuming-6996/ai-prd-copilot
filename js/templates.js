@@ -1,6 +1,6 @@
 (function (global) {
   var DEFAULT_SECTIONS = [
-    { key: "name", title: "1. 项目名称", description: "命名规范：【模块】平台-改动点，示例：【质检】VS质检平台-列表页质检结果上移" },
+    { key: "name", title: "1. 项目名称", description: "命名规范：【业务线】业务分支+改进点，示例：【质检】CS质检平台-UI列表页改版" },
     { key: "background", title: "2. 项目背景", description: "说清楚为什么做：业务痛点 / 老板指示 / 竞品变化 / 业务链路现状" },
     { key: "goal", title: "3. 项目目标", description: "干成什么样，达到什么目的（尽量可量化）" },
     { key: "value", title: "4. 项目价值", description: "定性 + 定量：降本增效 / 体验提升 / 风险降低" },

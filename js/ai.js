@@ -92,7 +92,7 @@
     var systemPrompt, userPrompt;
 
     if (action === "draft") {
-      systemPrompt = "你是资深B端产品经理。根据材料按框架撰写PRD。只输出JSON，格式：{\"name\":\"项目名\",\"sections\":[{\"key\":\"章节key\",\"title\":\"标题\",\"content\":\"正文\"}]}。数据层/后端层/前端层必须完全不同。改进点用列表不要表格。";
+      systemPrompt = "你是资深B端产品经理。根据材料按框架撰写PRD。只输出JSON，格式：{\"name\":\"项目名\",\"sections\":[{\"key\":\"章节key\",\"title\":\"标题\",\"content\":\"正文\"}]}。项目名称必须遵循【业务线】业务分支+改进点格式，如【质检】CS质检平台-UI列表页改版。name章节(key=name)的内容就是项目名称本身一句话，不能写成背景或目标。数据层/后端层/前端层必须完全不同。改进点用列表不要表格。";
       userPrompt = "框架：" + payload.sections.map(function(s){return s.key + "：" + s.title;}).join("\n") + "\n\n材料：" + payload.materials.map(function(m){return m.text;}).join("\n\n");
     } else if (action === "questions") {
       systemPrompt = "你是资深产品经理+开发工程师。基于PRD初稿产出两阶段追问。只输出JSON：{\"questions\":[{\"stage\":1|2,\"sectionKey\":\"key\",\"question\":\"问题\",\"suggestedAnswer\":\"可填入PRD的参考答案\",\"actionGuidance\":\"告诉用户补充什么方向\",\"priority\":\"P0|P1|P2\",\"impact\":\"不填写的风险\",\"dataLayer\":true|false}]}。阶段一检查框架覆盖，阶段二开发视角审查，数据层必问。至少6条。";
