@@ -75,7 +75,12 @@
         serverKeyInvalid = true; serverHasKey = false;
         return fallbackToDemo(action, payload);
       }
-      if (!res.ok) { throw new Error((data && data.error) || "AI 服务异常，请稍后重试"); }
+      if (!res.ok) {
+        var errMsg = (data && data.error) || "AI 服务异常，请稍后重试";
+        var err = new Error(errMsg);
+        if (res.status === 402 || /insufficient balance|余额不足|模型服务错误\s*402|token.*用完/i.test(errMsg)) err.tokenExhausted = true;
+        throw err;
+      }
       serverKeyInvalid = false;
       return data;
     } catch (e) {
@@ -111,7 +116,9 @@
     });
     if (!res.ok) {
       var errText = await res.text().catch(function(){return "";});
-      throw new Error("API错误 " + res.status + "：" + errText.slice(0,200));
+      var err = new Error("API错误 " + res.status + "：" + errText.slice(0,200));
+      if (res.status === 402 || /insufficient balance|余额不足|token.*用完/i.test(errText)) err.tokenExhausted = true;
+      throw err;
     }
     var wrapper = await res.json();
     var content = (wrapper && wrapper.choices && wrapper.choices[0] && wrapper.choices[0].message && wrapper.choices[0].message.content) || "";

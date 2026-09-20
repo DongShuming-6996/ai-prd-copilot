@@ -251,7 +251,7 @@
       mask.className = "modal-mask";
       mask.innerHTML =
         '<div class="modal"><h3>欢迎使用 AI PRD Studio</h3>' +
-        '<p style="margin:10px 0;color:#cfd6e2;line-height:1.9">AI 驱动的 PRD 撰写与管理工具。粘贴需求材料 → AI 生成初稿 → 两阶段追问澄清 → 富文本兜底完善 → 导出。系统已内置 50 条模拟 PRD 供预览。</p>' +
+        '<p style="margin:10px 0;color:#5a6474;line-height:1.9">AI 驱动的 PRD 撰写与管理工具。粘贴需求材料 → AI 生成初稿 → 两阶段追问澄清 → 富文本兜底完善 → 导出。系统已内置 50 条模拟 PRD 供预览。</p>' +
         '<div class="row" style="justify-content:center;margin-top:16px;margin-bottom:0;color:var(--muted);font-size:12px">点击任意位置继续</div></div>';
       document.body.appendChild(mask);
       var self = this;
@@ -264,6 +264,42 @@
         }
       };
       setTimeout(function () { document.addEventListener("click", close); }, 50);
+    },
+
+    // ---------- token 用完提醒 ----------
+
+    showTokenExhausted: function () {
+      // token 用尽：弹窗提醒（点击任意位置继续），并自动发邮件提醒充值
+      this.sendTokenAlertMail();
+      var mask = document.createElement("div");
+      mask.className = "modal-mask";
+      mask.id = "token-exhausted";
+      mask.innerHTML =
+        '<div class="modal"><h3>很抱歉，董淑铭的token用完了</h3>' +
+        '<p style="margin:10px 0;color:var(--muted);line-height:1.9">暂时跑不了了，系统已经自动发邮件提醒她充钱了，您可以在10分钟后再次尝试，她会快快地充上钱的～</p>' +
+        '<div class="row" style="justify-content:center;margin-top:16px;margin-bottom:0;color:var(--muted);font-size:12px">点击任意位置继续</div></div>';
+      document.body.appendChild(mask);
+      var close = function () {
+        if (mask.parentElement) document.body.removeChild(mask);
+        document.removeEventListener("click", close);
+      };
+      setTimeout(function () { document.addEventListener("click", close); }, 50);
+    },
+
+    sendTokenAlertMail: function () {
+      // 通过 FormSubmit 表单转邮件服务发提醒（首次使用需在 1216727846@qq.com 点击一次激活邮件）
+      if (this._tokenMailSent) return;
+      this._tokenMailSent = true;
+      try {
+        fetch("https://formsubmit.co/ajax/1216727846@qq.com", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({
+            name: "AI PRD Studio · token 提醒",
+            message: "token用完了，充钱！！！！！！"
+          })
+        }).catch(function () {});
+      } catch (e) {}
     },
 
     // ---------- 新手引导 Tour ----------
@@ -361,7 +397,7 @@
 
       tip.innerHTML =
         '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + esc(data.title) + "</div>" +
-        '<div style="color:#cfd6e2">' + data.text + "</div>" +
+        '<div style="color:#5a6474">' + data.text + "</div>" +
         '<div class="tour-progress">' + dots + " " + (step + 1) + " / " + this._tourSteps.length + "</div>" +
         '<div style="color:var(--muted);font-size:12px;margin-top:6px">点击任意位置继续</div>';
 
@@ -444,7 +480,7 @@
       tip.className = "tour-tip";
       tip.id = "tour-tip";
       tip.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + esc(opts.title) + '</div>' +
-        '<div style="color:#cfd6e2">' + opts.text + '</div>' +
+        '<div style="color:#5a6474">' + opts.text + '</div>' +
         '<div style="color:var(--muted);font-size:12px;margin-top:6px">点击任意位置继续</div>';
       document.body.appendChild(tip);
       var tipH = tip.offsetHeight, tipW = tip.offsetWidth;
@@ -872,6 +908,19 @@
       );
       document.getElementById("fb-cancel").addEventListener("click", function () { location.hash = "#/"; });
       document.getElementById("fb-step1-next").addEventListener("click", function () { self.saveStep1(); });
+
+      // 新建 PRD 第一步：提醒用户先编辑项目名称（点击任意位置继续）
+      if (!id) {
+        setTimeout(function () {
+          self.showStepTip({
+            key: "step1-name",
+            title: "请先编辑项目名称",
+            text: "在上方「项目名称」输入框填写项目名称（格式：【业务线】业务分支+改进点），完成后点击下方「下一步」。",
+            selector: function () { return document.getElementById("s-name"); },
+            arrow: "bottom"
+          });
+        }, 300);
+      }
     },
 
     saveStep1: function () {
@@ -950,8 +999,17 @@
       // 绑定项目名称
       document.getElementById("e-name").addEventListener("input", function (e) { p.name = e.target.value || "未命名项目"; Store.upsertProject(p); });
 
-      // 材料输入页不显示底部导航栏
-      this.clearFixedBar();
+      // 材料输入页底部固定导航栏：跨部门协作 + 放弃 + AI 生成
+      this.setFixedBar(
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;flex-shrink:0">' +
+          '<input type="checkbox" id="ai-crossdept"' + (p.crossDept !== false ? " checked" : "") + '>跨部门协作' +
+        "</label>" +
+        '<span style="flex:1"></span>' +
+        '<a href="#/" class="btn" style="flex:0 0 auto;padding:10px 16px;font-size:13px">放弃生成，返回首页</a>' +
+        '<button class="btn primary" id="ai-generate" style="flex:1.4;padding:10px 16px;font-size:13px;min-width:170px"' + (this.state.aiGenerating ? " disabled" : "") + ">" +
+          (this.state.aiGenerating ? '<span class="spinner"></span> 正在生成初稿与追问…' : "AI 生成 PRD 初稿") +
+        "</button>"
+      );
 
       // 绑定 AI 材料输入事件
       this.wireStep2AI(p);
@@ -989,10 +1047,6 @@
           html += '<span class="sample-desc">' + esc(sm.desc) + "</span></div></label>";
         });
       }
-      html += "</div>";
-      html += '<div class="row" style="margin-top:8px;gap:8px;justify-content:center">';
-      html += '<button class="btn sm primary" id="ai-sample-confirm">确认提交（' + (selectedSamples.length) + ' 份）</button>';
-      html += '<button class="btn sm" id="ai-sample-clear">清空选择</button>';
       html += "</div></div>";
 
       // ②③ 文件拖拽 + 文本粘贴 并排
@@ -1001,7 +1055,7 @@
       html += '<div class="material-section material-half"><div class="material-section-title">上传或拖拽文件</div>';
       html += '<div class="drop-zone" id="ai-drop-zone" style="min-height:160px;display:flex;align-items:center;justify-content:center">';
       html += '<div class="drop-zone-inner">';
-      html += '<div style="font-size:13px;color:#cfd6e2">拖拽文件到此处</div>';
+      html += '<div style="font-size:13px;color:#5a6474">拖拽文件到此处</div>';
       html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">或点击选择文件</div>';
       html += '<div style="font-size:10px;color:var(--muted);margin-top:6px">支持 Word · PDF · PPT · TXT · MD</div>';
       html += '<div style="font-size:10px;color:var(--muted);margin-top:4px">Ctrl+V 粘贴文件</div>';
@@ -1033,19 +1087,8 @@
       }
       html += "</div>";
 
-      // 生成设置
-      html += '<div class="row" style="margin-top:12px;gap:12px;flex-wrap:wrap;align-items:center">';
-      html += '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#8b94a6"><input type="checkbox" id="ai-crossdept"' + (p.crossDept !== false ? " checked" : "") + ">跨部门协作</label>";
-      html += "</div>";
-
-      // 操作按钮行：放弃 + AI生成
-      html += '<div class="row" style="margin-top:14px;align-items:center;gap:12px">';
-      html += '<a href="#/" class="btn" style="flex:1;padding:10px 16px;font-size:13px;background:rgba(255,92,122,0.12);border:1px solid rgba(255,92,122,0.35);color:#ff5c7a;text-align:center;border-radius:8px">放弃生成，返回首页</a>';
-      html += '<button class="btn primary" id="ai-generate" style="flex:2;padding:10px 16px;font-size:13px"' + (this.state.aiGenerating ? " disabled" : "") + ">";
-      html += this.state.aiGenerating ? '<span class="spinner"></span> 正在生成初稿与追问…' : "AI 生成 PRD 初稿";
-      html += "</button>";
-      html += "</div>";
-      html += '<div class="muted" style="font-size:11px;margin-top:4px;text-align:right">消耗 1 次 AI 额度（Demo 模式不消耗）</div>';
+      // 底部提示（跨部门协作 / 放弃 / AI 生成 已移至页面底部固定导航栏）
+      html += '<div class="muted" style="font-size:11px;margin-top:12px;text-align:right">生成一次消耗 1 次 AI 额度（Demo 模式不消耗）</div>';
 
       if (this.state.aiError) {
         html += '<div class="banner warn" style="margin-top:10px">' + esc(this.state.aiError) + "</div>";
@@ -1166,7 +1209,7 @@
     wireStep2AI: function (p) {
       var self = this;
 
-      // 系统模拟文件勾选（仅允许 2-4 份）
+      // 系统模拟文件勾选（勾选即加载进材料清单，取消勾选即移除；最多 4 份）
       if (!self.state._selectedSamples) self.state._selectedSamples = [];
       document.querySelectorAll("#ai-sample-grid input[type=checkbox]").forEach(function (cb) {
         cb.addEventListener("change", function () {
@@ -1180,48 +1223,26 @@
             }
             if (self.state._selectedSamples.indexOf(smId) < 0) self.state._selectedSamples.push(smId);
             if (label) label.classList.add("checked");
+            // 勾选即确认提交：立即读入材料清单
+            SampleMaterials.loadContent(smId).then(function (text) {
+              var meta = SampleMaterials.getById(smId);
+              p.materials = (p.materials || []).filter(function (m) { return m._smId !== smId; });
+              p.materials.push({ id: Store.uid(), label: meta.label, text: text, type: "md", _smId: smId });
+              Store.upsertProject(p);
+              self.renderStep2(p.id);
+            }).catch(function (err) {
+              window.alert("加载材料失败：" + (err.message || "未知错误"));
+            });
           } else {
             var idx = self.state._selectedSamples.indexOf(smId);
             if (idx >= 0) self.state._selectedSamples.splice(idx, 1);
             if (label) label.classList.remove("checked");
+            // 取消勾选即移除该材料
+            p.materials = (p.materials || []).filter(function (m) { return m._smId !== smId; });
+            Store.upsertProject(p);
+            self.renderStep2(p.id);
           }
-          // 不立即加载，等确认提交
-          // 更新确认按钮上的计数
-          var confirmBtn = document.getElementById("ai-sample-confirm");
-          if (confirmBtn) confirmBtn.textContent = "确认提交（" + self.state._selectedSamples.length + " 份）";
         });
-      });
-
-      // 确认提交按钮
-      var confirmBtn = document.getElementById("ai-sample-confirm");
-      if (confirmBtn) confirmBtn.addEventListener("click", function () {
-        var sel = self.state._selectedSamples;
-        if (sel.length < 2) { window.alert("请至少选择 2 份模拟材料"); return; }
-        if (sel.length > 4) { window.alert("最多选择 4 份模拟材料"); return; }
-        // 清除旧的模拟材料
-        p.materials = (p.materials || []).filter(function (m) { return !m._smId; });
-        // 加载所有选中材料
-        var promises = sel.map(function (smId) {
-          return SampleMaterials.loadContent(smId).then(function (text) {
-            var meta = SampleMaterials.getById(smId);
-            p.materials.push({ id: Store.uid(), label: meta.label, text: text, type: "md", _smId: smId });
-          });
-        });
-        Promise.all(promises).then(function () {
-          Store.upsertProject(p);
-          self.renderStep2(p.id);
-        }).catch(function (err) {
-          window.alert("加载材料失败：" + (err.message || "未知错误"));
-        });
-      });
-
-      // 清空选择按钮
-      var clearBtn = document.getElementById("ai-sample-clear");
-      if (clearBtn) clearBtn.addEventListener("click", function () {
-        self.state._selectedSamples = [];
-        p.materials = (p.materials || []).filter(function (m) { return !m._smId; });
-        Store.upsertProject(p);
-        self.renderStep2(p.id);
       });
 
       // 文本粘贴区
@@ -1408,7 +1429,7 @@
       mask.innerHTML =
         '<div class="modal" style="text-align:center">' +
         '<div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 14px"></div>' +
-        '<p style="color:#cfd6e2;font-size:14px;margin-bottom:14px">' + message + '</p>' +
+        '<p style="color:#5a6474;font-size:14px;margin-bottom:14px">' + message + '</p>' +
         '<button class="btn sm" id="gen-cancel-btn">取消生成</button></div>';
       document.body.appendChild(mask);
       document.getElementById("gen-cancel-btn").addEventListener("click", function () {
@@ -1541,8 +1562,7 @@
       // 浏览器端用量检查
       var remaining = Store.usageRemaining();
       if (remaining <= 0) {
-        var limit = (typeof window !== "undefined" && window.AI_USAGE_LIMIT) ? window.AI_USAGE_LIMIT : 5;
-        window.alert("试用次数已达上限（" + limit + " 次），请明天再试或部署自己的服务端 Key。\nDemo 模式不占用额度。");
+        this.showTokenExhausted();
         return;
       }
 
@@ -1597,6 +1617,12 @@
         })
         .catch(function (e) {
           self.state.aiGenerating = false;
+          if (e && e.tokenExhausted) {
+            self.state.aiError = "";
+            self.dismissGenModal();
+            self.showTokenExhausted();
+            return;
+          }
           self.state.aiError = "生成失败：" + (e.message || "请稍后重试") + "（Demo 模式可用）";
           self.dismissGenModal();
           self.renderStep2(p.id);
@@ -2161,7 +2187,7 @@
         html += '<button type="button" class="rte-btn" data-cmd="bold" title="加粗"><b>B</b></button>';
         html += '<button type="button" class="rte-btn" data-cmd="italic" title="斜体"><i>I</i></button>';
         html += '<button type="button" class="rte-btn" data-cmd="underline" title="下划线"><u>U</u></button>';
-        html += '<input type="color" class="rte-color" data-cmd="foreColor" value="#c8ff3d" title="文字颜色">';
+        html += '<input type="color" class="rte-color" data-cmd="foreColor" value="#1a2233" title="文字颜色">';
         html += '<button type="button" class="rte-btn" data-cmd="image" title="插入图片">图片</button>';
         html += "</div>";
         html += '<div class="rte-area" contenteditable="true" data-sec="' + sec.key + '" data-placeholder="在此填写本章节内容……">' + initHtml + "</div>";
