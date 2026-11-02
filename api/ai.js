@@ -2,6 +2,18 @@
 const { handleAction } = require("../lib/ai-proxy.js");
 
 module.exports = async function handler(req, res) {
+  // CORS：允许前端（GitHub Pages）跨域调用本函数
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+
+  // 浏览器跨域预检（OPTIONS）直接放行，不进入业务逻辑
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
+  }
+
   // 可选来源校验：设置 ALLOWED_ORIGINS（逗号分隔）后只允许指定域名调用
   const allowed = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
