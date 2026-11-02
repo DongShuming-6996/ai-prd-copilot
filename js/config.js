@@ -5,10 +5,8 @@
 // Vercel 代理地址（优先走服务端）
 // Vercel 代理地址（优先走服务端，Key 在 Vercel 环境变量中，安全）
 window.AI_API_BASE = "https://ai-prd-copilot-plum.vercel.app";
-// 备用直连 Key（仅本地调试用，留空则走 Demo）
-window.AI_DIRECT_KEY = "c2stMTViOWRhNWQ2NTg0NDhiYWJhYmI4YTZiMDZiYTRjMTc=";
-window.AI_DIRECT_BASE = "https://api.deepseek.com";
-window.AI_DIRECT_MODEL = "deepseek-chat";
+// 直连 Key 已移除：前端统一走 Vercel /api/ai 服务端代理，Key 存 Vercel 环境变量，永不进前端。
+// 用户仍可通过顶部「设置 AI Key」使用自己的 Key（仅存浏览器本地 localStorage）。
 
 // 每个访客（浏览器）的试用次数限制
 window.AI_USAGE_LIMIT = 5;         // 最多生成次数
